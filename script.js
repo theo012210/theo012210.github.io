@@ -38,6 +38,19 @@ const noteWeights = NOTE_WEIGHT_CONFIG.reduce((acc, cfg)=>{
   return acc;
 }, {});
 
+function validateWeightsForLevel(levelKey){
+  const cfg = LEVELS[levelKey];
+  if(!cfg) return {ok:true, zeroTypes:[]};
+  const zeroTypes = cfg.allowed.filter(name=>{
+    const weight = noteWeights[name];
+    return typeof weight === 'number' && weight <= 0;
+  });
+  if(zeroTypes.length > 1){
+    return {ok:false, zeroTypes};
+  }
+  return {ok:true, zeroTypes};
+}
+
 // Level config
 const LEVELS = {
   easy: {
@@ -95,10 +108,11 @@ function initializeNoteWeightControls(){
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = '0';
-  slider.max = '100';
+    slider.max = '100';
     slider.step = '5';
     slider.value = String(DEFAULT_WEIGHT_PERCENT);
     slider.dataset.note = cfg.key;
+    slider.dataset.previous = slider.value;
     slider.setAttribute('aria-label', `${cfg.label} frequency`);
 
     slider.addEventListener('input', ()=>{
@@ -108,6 +122,20 @@ function initializeNoteWeightControls(){
     });
 
     slider.addEventListener('change', ()=>{
+      const levelKey = levelSelect ? levelSelect.value : null;
+      if(levelKey){
+        const validation = validateWeightsForLevel(levelKey);
+        if(!validation.ok){
+          const previous = slider.dataset.previous || String(DEFAULT_WEIGHT_PERCENT);
+          slider.value = previous;
+          const prevPercent = Number(previous);
+          noteWeights[cfg.key] = prevPercent / 100;
+          value.textContent = `${prevPercent}%`;
+          showToast('At most one note type can be set to 0% for this level.', false);
+          return;
+        }
+      }
+      slider.dataset.previous = slider.value;
       newQuestion();
     });
 
@@ -128,6 +156,7 @@ let playbackTimeout = null;
 let isPlaying = false;
 const TEMPO_BPM = 96;
 const secondsPerUnit = (60 / TEMPO_BPM) / UNITS_PER_QUARTER;
+const PREP_BARS = 2;
 
 function ensureAudioContext(){
   if(!audioCtx){
@@ -196,6 +225,14 @@ function playRhythm(bars){
 
   let startTime = audioCtx.currentTime + 0.1;
   let cursor = startTime;
+
+  const prepBeats = PREP_BARS * 4;
+  const beatDurationSeconds = UNITS_PER_QUARTER * secondsPerUnit;
+  for(let beat = 0; beat < prepBeats; beat++){
+    const accent = beat % 4 === 0;
+    scheduleClick(cursor, accent);
+    cursor += beatDurationSeconds;
+  }
 
   for(const bar of bars){
     let isFirstNoteInBar = true;
@@ -610,6 +647,11 @@ function renderOptionCard(container, bars, idx){
 
 function newQuestion(){
   const level = levelSelect.value;
+  const validation = validateWeightsForLevel(level);
+  if(!validation.ok){
+    showToast('Adjust the sliders so no more than one allowed note type is at 0% for this level.', false);
+    return;
+  }
   const gen = generateForLevel(level);
   const {options, correctIndex} = generateOptions(gen.bars, level);
   currentCorrectIndex = correctIndex;
