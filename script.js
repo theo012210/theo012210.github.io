@@ -7,7 +7,7 @@
  */
 
 // Basic utilities and music token definitions
-const UNIT = 1; // smallest unit = demisemiquaver (1/32 note) -> we'll call it 1 unit
+const UNIT = 1; // smallest unit = demisemiquaver (1/32 note)
 const UNITS_PER_QUARTER = 8; // quarter = 8 units
 const UNITS_PER_BAR = UNITS_PER_QUARTER * 4; // 32 units per bar
 
@@ -20,38 +20,47 @@ const TYPES = {
   demisemiquaver: {name:'demisemiquaver', units: 1, vfDur:'32'},
 };
 
-function dottedOf(type){
-  return {name:`dotted-${type.name}`, units: Math.floor(type.units * 1.5), vfDur: type.vfDur, dots:1};
-}
-
-// Triplet group (we'll implement as a tuple of three crotchet/eighths depending on selected base value)
 function tripletGroup(baseType){
-  // baseType is usually quaver or crotchet - we'll set as quaver (three quaver-triplets occupy 1 beat)
   return {name:`triplet-${baseType.name}`, units: UNITS_PER_QUARTER, isTriplet:true, base:baseType};
 }
+
+const NOTE_WEIGHT_CONFIG = [
+  {key:'semibreve', label:'Semibreve'},
+  {key:'minim', label:'Minim'},
+  {key:'crotchet', label:'Crotchet'},
+  {key:'quaver', label:'Quaver'},
+  {key:'semiquaver', label:'Semiquaver'}
+];
+
+const DEFAULT_WEIGHT_PERCENT = 100;
+const noteWeights = NOTE_WEIGHT_CONFIG.reduce((acc, cfg)=>{
+  acc[cfg.key] = DEFAULT_WEIGHT_PERCENT / 100;
+  return acc;
+}, {});
 
 // Level config
 const LEVELS = {
   easy: {
-    allowed:['semibreve','minim','crotchet','quaver'],
-    required:['semibreve','minim','crotchet','quaver'],
-    allowDotted:false,
+    allowed:['semibreve','minim','crotchet'],
     allowTriplets:false,
-    halfOfTypes:false
+    mustInclude:[]
   },
   medium: {
-    allowed:['semibreve','minim','crotchet','quaver','semiquaver'],
-    required:['semibreve','minim','crotchet','quaver','semiquaver','dotted','triplet'],
-    allowDotted:true,
-    allowTriplets:true,
-    halfOfTypes:false
+    allowed:['minim','crotchet','quaver'],
+    allowTriplets:false,
+    mustInclude:['quaver']
   },
   difficult: {
-    allowed:['semibreve','minim','crotchet','quaver','semiquaver','demisemiquaver'],
-    required:[], // choose half of the types randomly
-    allowDotted:false,
-    allowTriplets:false,
-    halfOfTypes:true
+    allowed:['minim','crotchet','quaver','semiquaver'],
+    allowTriplets:true,
+    mustInclude:['semiquaver'],
+    mustIncludeTriplet:true
+  },
+  expert: {
+    allowed:['crotchet','quaver','semiquaver'],
+    allowTriplets:true,
+    mustInclude:['semiquaver'],
+    mustIncludeTriplet:true
   }
 };
 
@@ -61,14 +70,58 @@ const optionsContainer = document.getElementById('optionsContainer');
 const levelSelect = document.getElementById('level');
 const newBtn = document.getElementById('newBtn');
 const playBtn = document.getElementById('playBtn');
-const toast = document.getElementById('toast');
+const weightControlsEl = document.getElementById('noteWeightControls');
 const toastManager = new Toasts({position:'bottom-left', offsetX:16, offsetY:16});
+
+function initializeNoteWeightControls(){
+  if(!weightControlsEl) return;
+  NOTE_WEIGHT_CONFIG.forEach(cfg=>{
+    const row = document.createElement('div');
+    row.className = 'note-weight-row';
+
+    const header = document.createElement('div');
+    header.className = 'note-weight-header';
+
+    const label = document.createElement('span');
+    label.textContent = cfg.label;
+
+    const value = document.createElement('span');
+    value.className = 'note-weight-value';
+    value.textContent = `${DEFAULT_WEIGHT_PERCENT}%`;
+
+    header.appendChild(label);
+    header.appendChild(value);
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+  slider.max = '100';
+    slider.step = '5';
+    slider.value = String(DEFAULT_WEIGHT_PERCENT);
+    slider.dataset.note = cfg.key;
+    slider.setAttribute('aria-label', `${cfg.label} frequency`);
+
+    slider.addEventListener('input', ()=>{
+      const percent = Number(slider.value);
+      noteWeights[cfg.key] = percent / 100;
+      value.textContent = `${percent}%`;
+    });
+
+    slider.addEventListener('change', ()=>{
+      newQuestion();
+    });
+
+    row.appendChild(header);
+    row.appendChild(slider);
+    weightControlsEl.appendChild(row);
+  });
+}
+
+initializeNoteWeightControls();
 
 let currentCorrectIndex = null;
 let currentRhythm = null;
 let attemptsRemaining = 3;
-let rng = (n)=>Math.floor(Math.random()*n);
-
 let audioCtx = null;
 let scheduledOscillators = [];
 let playbackTimeout = null;
@@ -101,7 +154,11 @@ function finalizePlaybackState(){
 function stopPlayback(){
   if(scheduledOscillators.length){
     for(const osc of scheduledOscillators){
-      try { osc.stop(); } catch(e){/* ignore */}
+      try {
+        osc.stop();
+      } catch(e){
+        // ignore
+      }
     }
   }
   finalizePlaybackState();
@@ -165,6 +222,32 @@ function playRhythm(bars){
 // -- Generation helpers --
 function pickRandom(arr){return arr[Math.floor(Math.random()*arr.length)];}
 
+function getTokenWeight(token){
+  if(token.isTriplet){
+    const baseName = token.base ? token.base.name : 'quaver';
+    const weight = noteWeights[baseName];
+    return typeof weight === 'number' && weight >= 0 ? weight : 1;
+  }
+  const weight = noteWeights[token.name];
+  return typeof weight === 'number' && weight >= 0 ? weight : 1;
+}
+
+function weightedPick(candidates){
+  const weights = candidates.map(getTokenWeight);
+  const total = weights.reduce((sum, value)=>sum + value, 0);
+  if(total <= 0){
+    return pickRandom(candidates);
+  }
+  let threshold = Math.random() * total;
+  for(let i=0;i<candidates.length;i++){
+    threshold -= weights[i];
+    if(threshold <= 0){
+      return candidates[i];
+    }
+  }
+  return candidates[candidates.length - 1];
+}
+
 function cloneBars(bars){
   return bars.map(bar=>bar.map(token=>Object.assign({}, token)));
 }
@@ -178,112 +261,147 @@ function barsKey(bars){
 
 function generateForLevel(levelKey){
   const cfg = LEVELS[levelKey];
+  if(!cfg) throw new Error(`Unknown level: ${levelKey}`);
 
-  // compute allowed types as objects
-  let allowed = cfg.allowed.map(k=>TYPES[k]);
-  // include dotted if allowed
-  if(cfg.allowDotted){
-    // dotted variants of crotchet/quaver/semiquaver etc are allowed
-  allowed = allowed.concat(allowed.map(t=>({name:'dotted-'+t.name, units:Math.floor(t.units*1.5), vfDur:t.vfDur, dots:1})));
+  const allowedNotes = cfg.allowed.map(k=>TYPES[k]).filter(Boolean);
+  if(!allowedNotes.length) throw new Error(`No note types configured for ${levelKey}`);
+  if(cfg.mustIncludeTriplet && !cfg.allowTriplets){
+    throw new Error(`Level ${levelKey} requires triplets but does not allow them.`);
   }
-  // triplets allowed -> we'll allow triplet groups of quavers (3 in one beat)
-  const tripletTemplate = tripletGroup(TYPES.quaver);
 
-  // required tokens
-  let requiredTokens = [];
-  if(cfg.halfOfTypes){
-    // choose half of the available types from allowed base types (non-dotted)
-    const baseTypes = LEVELS.difficult.allowed; // base keys
-    const chooseCount = Math.max(1, Math.floor(baseTypes.length/2));
-    const shuffled = baseTypes.slice().sort(()=>Math.random()-.5);
-    const chosen = shuffled.slice(0, chooseCount);
-    requiredTokens = chosen.map(k=>TYPES[k]);
-  } else if(cfg.required && cfg.required.length){
-    for(const r of cfg.required){
-      if(r==='dotted'){
-        // ensure at least one dotted from base allowed notes
-  const base = LEVELS.medium.allowed.map(k=>TYPES[k]).find(t=>t.units<=16) || TYPES.crotchet;
-  requiredTokens.push(dottedOf(base));
-      } else if(r==='triplet'){
-        requiredTokens.push(tripletTemplate);
-      } else {
-        requiredTokens.push(TYPES[r]);
+  const tripletTemplate = cfg.allowTriplets ? tripletGroup(TYPES.quaver) : null;
+  const basePool = cfg.allowTriplets && tripletTemplate
+    ? allowedNotes.concat([tripletTemplate])
+    : allowedNotes.slice();
+  const unitSizes = basePool.map(token=>token.units);
+
+  const reachable = new Array(UNITS_PER_BAR + 1).fill(false);
+  reachable[0] = true;
+  for(let total=1; total<=UNITS_PER_BAR; total++){
+    for(const size of unitSizes){
+      if(total >= size && reachable[total - size]){
+        reachable[total] = true;
+        break;
       }
     }
   }
-
-  // We will build two bars separately (each 32 units)
-  function fillBar(withRequiredTokens){
-    const tokens = [];
-    let usedUnits = 0;
-
-    // Insert the required tokens that we decide to place in this bar
-    for(const t of withRequiredTokens){
-      tokens.push(Object.assign({}, t));
-      usedUnits += t.units;
-    }
-
-    // Fill remaining units with random allowed tokens
-    const allowedPool = allowed.slice();
-    // also triplet optionally
-    if(cfg.allowTriplets) allowedPool.push(tripletTemplate);
-
-    // greedy random fill
-    const maxTries = 1000;
-    let tries=0;
-    while(usedUnits < UNITS_PER_BAR && tries < maxTries){
-      tries++;
-      // pick a random candidate
-      const cand = pickRandom(allowedPool);
-      if(usedUnits + cand.units > UNITS_PER_BAR) continue;
-      tokens.push(Object.assign({}, cand));
-      usedUnits += cand.units;
-    }
-
-    // If not exact, attempt adjustment by filling with smallest unit
-    while(usedUnits < UNITS_PER_BAR){
-  const smallest = {name:'demisemiquaver', units:1, vfDur:'32'}; // always allowed in worst-case when resolving
-  tokens.push(smallest);
-      usedUnits++;
-    }
-
-    // If overfilled (shouldn't happen), trim
-    let i=0;
-    while(usedUnits > UNITS_PER_BAR && tokens.length && i<50){
-      const t = tokens.pop();
-      usedUnits -= t.units;
-      i++;
-    }
-
-    // final validation
-    if(usedUnits !== UNITS_PER_BAR) {
-      console.warn('bar units mismatch', usedUnits);
-    }
-
-    // shuffle tokens slightly so required tokens aren't always front
-    return tokens.sort(()=>Math.random()-.5);
+  if(!reachable[UNITS_PER_BAR]){
+    throw new Error(`Level ${levelKey} cannot fill a bar with configured tokens.`);
   }
 
-  // Decide how to distribute requiredTokens across two bars
-  const reqs = requiredTokens.slice();
-  const barReqs = [[],[]];
-  // place each required token in a random bar if it fits (if too big, put in its own bar)
-  for(const req of reqs){
-    // place in bar 0 or 1 randomly; but ensure it fits (i.e., doesn't exceed 32)
-    const choice = Math.random() < 0.5 ? 0 : 1;
-    barReqs[choice].push(req);
+  const requiredTokens = [];
+  if(cfg.mustInclude && cfg.mustInclude.length){
+    cfg.mustInclude.forEach(name=>{
+      const token = TYPES[name];
+      if(token) requiredTokens.push(token);
+    });
+  }
+  if(cfg.mustIncludeTriplet && tripletTemplate){
+    requiredTokens.push(tripletTemplate);
   }
 
-  // Ensure the bars can still be filled: if a single required consumes >32 units (unlikely), adjust
-  // Build bars
-  const barTokens = [fillBar(barReqs[0]), fillBar(barReqs[1])];
+  function totalUnits(tokens){
+    return (tokens || []).reduce((sum, token)=>sum + (token ? token.units : 0), 0);
+  }
 
-  return {bars:barTokens};
+  function cloneToken(token){
+    if(token.isTriplet){
+      return {name: token.name, units: token.units, isTriplet:true, base: token.base};
+    }
+    const copy = {name: token.name, units: token.units, vfDur: token.vfDur};
+    if(token.dots){
+      copy.dots = token.dots;
+    }
+    return copy;
+  }
+
+  function fillBar(requiredList){
+    const initial = (requiredList || []).map(cloneToken);
+    const tokens = initial.slice();
+    let usedUnits = totalUnits(tokens);
+    if(usedUnits > UNITS_PER_BAR){
+      return null;
+    }
+
+    let safety = 0;
+    while(usedUnits < UNITS_PER_BAR && safety < 500){
+      safety++;
+      const remaining = UNITS_PER_BAR - usedUnits;
+      const candidates = basePool.filter(token=>{
+        const leftover = remaining - token.units;
+        return leftover >= 0 && reachable[leftover];
+      });
+      if(!candidates.length){
+        return null;
+      }
+      const chosenTemplate = weightedPick(candidates);
+      const chosen = cloneToken(chosenTemplate);
+      tokens.push(chosen);
+      usedUnits += chosen.units;
+    }
+
+    if(usedUnits !== UNITS_PER_BAR){
+      return null;
+    }
+
+    return tokens.sort(()=>Math.random() - 0.5);
+  }
+
+  function distributeRequiredTokens(){
+    if(!requiredTokens.length){
+      return [[],[]];
+    }
+
+    const barReqs = [[],[]];
+    const order = requiredTokens.slice().sort(()=>Math.random() - 0.5);
+    for(const template of order){
+      const firstChoice = Math.random() < 0.5 ? 0 : 1;
+      const secondChoice = firstChoice === 0 ? 1 : 0;
+      if(totalUnits(barReqs[firstChoice]) + template.units <= UNITS_PER_BAR){
+        barReqs[firstChoice].push(template);
+      } else if(totalUnits(barReqs[secondChoice]) + template.units <= UNITS_PER_BAR){
+        barReqs[secondChoice].push(template);
+      } else {
+        return null;
+      }
+    }
+
+    return barReqs;
+  }
+
+  function validate(bars){
+    const flatTokens = bars.flat();
+    if(cfg.mustInclude && cfg.mustInclude.length){
+      for(const typeName of cfg.mustInclude){
+        const found = flatTokens.some(t=>!t.isTriplet && t.name === typeName);
+        if(!found) return false;
+      }
+    }
+    if(cfg.mustIncludeTriplet){
+      const hasTriplet = flatTokens.some(t=>t.isTriplet);
+      if(!hasTriplet) return false;
+    }
+    return true;
+  }
+
+  for(let attempt=0; attempt<400; attempt++){
+    const barReqs = distributeRequiredTokens();
+    if(!barReqs) continue;
+    const firstBar = fillBar(barReqs[0]);
+    if(!firstBar) continue;
+    const secondBar = fillBar(barReqs[1]);
+    if(!secondBar) continue;
+    const bars = [firstBar, secondBar];
+    if(validate(bars)){
+      return {bars};
+    }
+  }
+
+  throw new Error(`Failed to generate rhythm for level ${levelKey}`);
 }
 
 // Convert our token representation into VexFlow StaveNotes and tuplets
 function renderRhythmInto(div, bars, opts={width:600, height:140}){
-  // clear
   div.innerHTML='';
   if(!window.Vex || !Vex.Flow){
     throw new Error('VexFlow library is not available.');
@@ -294,32 +412,35 @@ function renderRhythmInto(div, bars, opts={width:600, height:140}){
   const context = renderer.getContext();
   context.setFont('Arial', 10, 'normal');
 
-  // create a stave across the width
   const staff = new VF.Stave(10, 10, opts.width-20);
   staff.addClef('percussion');
   staff.setContext(context).draw();
 
-  // create two voices (one per bar)
   const allTuplets = [];
   const barNotes = [];
+  const beams = [];
+  const beamableDurations = new Set(['8','16']);
 
-  // We'll place notes for each bar sequentially, but draw them on the same stave using formatter
   let allNotes = [];
 
   for(const bar of bars){
     const notes = [];
+    let beamRun = [];
     for(const token of bar){
       if(token.isTriplet){
-        // create three quaver notes and collect into tuplet
         const n1 = new VF.StaveNote({keys:['b/4'], duration:'8'});
         const n2 = new VF.StaveNote({keys:['b/4'], duration:'8'});
         const n3 = new VF.StaveNote({keys:['b/4'], duration:'8'});
-        // add a rest style if needed? We'll keep as normal noteheads (for percussion clef it's fine)
+        const tupleNotes = [n1,n2,n3];
         notes.push(n1,n2,n3);
-        allTuplets.push(new VF.Tuplet([n1,n2,n3]));
+        allTuplets.push(new VF.Tuplet(tupleNotes));
+        beams.push(new VF.Beam(tupleNotes));
+        if(beamRun.length > 1){
+          beams.push(new VF.Beam(beamRun));
+        }
+        beamRun = [];
       } else {
         const dur = token.vfDur || (()=>{
-          // fallback mapping from units
           for(const k in TYPES) if(TYPES[k].units===token.units) return TYPES[k].vfDur;
           return 'q';
         })();
@@ -328,27 +449,34 @@ function renderRhythmInto(div, bars, opts={width:600, height:140}){
           for(let d=0; d<token.dots; d++) st.addDotToAll();
         }
         notes.push(st);
+        if(beamableDurations.has(st.getDuration())){
+          beamRun.push(st);
+        } else if(beamRun.length > 1){
+          beams.push(new VF.Beam(beamRun));
+          beamRun = [];
+        } else {
+          beamRun = [];
+        }
       }
+    }
+    if(beamRun.length > 1){
+      beams.push(new VF.Beam(beamRun));
     }
     allNotes = allNotes.concat(notes);
     barNotes.push(notes);
   }
 
-  // Create a single voice with total ticks = 8/4*2 bars -> VexFlow voices require ticks: we will create 2 voices and format them across the stave
   const voice = new VF.Voice({num_beats: 8,  beat_value: 4});
   voice.setMode(VF.Voice.Mode.SOFT);
-  // add ticks for each note
   voice.addTickables(allNotes);
 
-  // Format and draw
   const formatter = new VF.Formatter();
   formatter.joinVoices([voice]).format([voice], opts.width-60);
   voice.draw(context, staff);
 
-  // Draw tuplets
   for(const t of allTuplets) t.setContext(context).draw();
+  for(const b of beams) b.setContext(context).draw();
 
-  // Draw barlines between measures for clarity
   if(bars.length > 1){
     const topY = staff.getYForLine(0) - 1;
     const bottomY = staff.getYForLine(staff.getNumLines() - 1) + 1;
@@ -458,7 +586,6 @@ function renderOptionCard(container, bars, idx){
       attemptsRemaining = 0;
       showToast('Correct!', true);
       setTimeout(()=>{
-        // Automatically progress after a short delay
         newQuestion();
       }, 600);
     } else {
@@ -475,7 +602,6 @@ function renderOptionCard(container, bars, idx){
     }
   });
   container.appendChild(card);
-  // render a smaller VexFlow graphic inside canvas
   const rect = card.getBoundingClientRect();
   const renderWidth = Math.max(360, Math.floor((rect.width || 0) - 32));
   const renderHeight = Math.max(120, Math.floor(renderWidth * 0.34));
@@ -491,18 +617,15 @@ function newQuestion(){
   currentRhythm = options[correctIndex];
   if(isPlaying) stopPlayback();
 
-  // hide visual question for listening-only mode
   if(vfContainer){
     vfContainer.innerHTML = '';
     vfContainer.style.display = 'none';
   }
 
-  // render options
   optionsContainer.innerHTML='';
   options.forEach((opt, i)=> renderOptionCard(optionsContainer, opt, i));
 }
 
-// initial
 newBtn.addEventListener('click', newQuestion);
 levelSelect.addEventListener('change', ()=> newQuestion());
 if(playBtn){
@@ -515,5 +638,5 @@ if(playBtn){
   });
 }
 
-// first question
 newQuestion();
+

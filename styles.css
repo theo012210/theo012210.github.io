@@ -7,6 +7,13 @@ h1{margin:0 0 12px}
 #renderer{background:linear-gradient(180deg,#fff,#f9fbfd);border:1px solid #ddd;padding:12px;border-radius:6px}
 #options{margin-top:16px}
 #optionsContainer{display:flex;flex-direction:column;gap:16px;margin-top:24px}
+.note-weight-controls{display:flex;flex-direction:column;gap:14px}
+.note-weight-row{background:var(--card);border:1px solid #ddd;padding:12px 14px;border-radius:8px;display:flex;flex-direction:column;gap:10px}
+.note-weight-header{display:flex;justify-content:space-between;align-items:center;font-size:.85rem;font-weight:600;color:#333}
+.note-weight-value{font-size:.85rem;color:#555}
+.note-weight-row input[type=range]{width:100%}
+#noteFrequency{margin-top:24px}
+#noteFrequency h2{margin:0 0 12px;font-size:1.15rem}
 .optionCard{background:var(--card);border:1px solid #ddd;padding:16px;border-radius:8px;cursor:pointer;transition:transform .08s,box-shadow .08s;display:flex;flex-direction:column;gap:12px;width:100%}
 .optionLabel{font-size:.85rem;font-weight:600;color:#333}
 .optionCard:hover{transform:translateY(-3px);box-shadow:0 6px 18px rgba(0,0,0,.06)}
@@ -16,8 +23,8 @@ h1{margin:0 0 12px}
 .fallbackBar{display:flex;gap:8px;align-items:flex-start}
 .fallbackBarLabel{font-weight:600;min-width:46px}
 .fallbackNotes{flex:1;word-break:break-word}
-.toast-notification{position:fixed;text-decoration:none;z-index:999999;max-width:300px;background-color:#fff;box-shadow:0 0 20px 0 rgba(0,0,0,.12);border-radius:4px;display:flex;padding:10px;transform:translate(0,-150%)}
-.toast-notification .toast-notification-wrapper{flex:1;padding-right:10px;overflow:hidden}
+.toast-notification{position:fixed;text-decoration:none;z-index:999999;max-width:360px;min-height:90px;background-color:#fff;box-shadow:0 0 20px 0 rgba(0,0,0,.12);border-radius:6px;display:flex;padding:16px 18px;transform:translate(0,-150%)}
+.toast-notification .toast-notification-wrapper{flex:1;padding-right:14px;overflow:hidden}
 .toast-notification .toast-notification-wrapper .toast-notification-header{padding:0 0 5px 0;margin:0;font-weight:500;font-size:14px;word-break:break-all;color:#4f525a}
 .toast-notification .toast-notification-wrapper .toast-notification-content{font-size:14px;margin:0;padding:0;word-break:break-all;color:#4f525a}
 .toast-notification .toast-notification-close{appearance:none;border:none;background:transparent;cursor:pointer;font-size:24px;line-height:24px;padding-bottom:4px;font-weight:bold;color:rgba(0,0,0,.2)}
