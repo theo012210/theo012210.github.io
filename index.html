@@ -32,6 +32,21 @@
     </section>
 
   </main>
+  <div id="instructionsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="instructionsTitle">
+    <div class="modal-content">
+      <button type="button" class="modal-close" id="closeInstructions" aria-label="Close instructions">&times;</button>
+      <h2 id="instructionsTitle">How to play</h2>
+      <p class="modal-intro">Welcome! Follow these steps to get the most out of this rhythm listening challenge:</p>
+      <ul class="modal-steps">
+        <li>Pick a difficulty level that suits you and adjust the note frequency sliders if you want to bias certain rhythms.</li>
+        <li>Press <strong>Play</strong> to hear the rhythm. You will get two full bars of prep beats before the question rhythm starts.</li>
+        <li>Compare the playback with the rendered notation options and click the one that matches the rhythm you heard.</li>
+        <li>You have three attempts; new questions will appear automatically after you guess correctly or use all tries.</li>
+      </ul>
+      <button type="button" class="modal-primary" id="startGameBtn">Got it!</button>
+    </div>
+    <div class="modal-backdrop" id="instructionsBackdrop" tabindex="-1" aria-hidden="true"></div>
+  </div>
   <footer class="credit">
     <small>Developed by <span class="credit-name">Theo Suen</span></small>
   </footer>

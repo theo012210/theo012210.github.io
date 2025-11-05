@@ -84,7 +84,29 @@ const levelSelect = document.getElementById('level');
 const newBtn = document.getElementById('newBtn');
 const playBtn = document.getElementById('playBtn');
 const weightControlsEl = document.getElementById('noteWeightControls');
+const instructionsModal = document.getElementById('instructionsModal');
+const instructionsBackdrop = document.getElementById('instructionsBackdrop');
+const closeInstructionsBtn = document.getElementById('closeInstructions');
+const startGameBtn = document.getElementById('startGameBtn');
 const toastManager = new Toasts({position:'bottom-left', offsetX:16, offsetY:16});
+
+function openInstructionsModal(){
+  if(!instructionsModal) return;
+  instructionsModal.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  if(startGameBtn){
+    setTimeout(()=>startGameBtn.focus(), 0);
+  }
+}
+
+function closeInstructionsModal(){
+  if(!instructionsModal) return;
+  instructionsModal.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+  if(newBtn){
+    newBtn.focus();
+  }
+}
 
 function initializeNoteWeightControls(){
   if(!weightControlsEl) return;
@@ -682,4 +704,23 @@ if(playBtn){
 }
 
 newQuestion();
+openInstructionsModal();
+
+if(closeInstructionsBtn){
+  closeInstructionsBtn.addEventListener('click', ()=> closeInstructionsModal());
+}
+
+if(startGameBtn){
+  startGameBtn.addEventListener('click', ()=> closeInstructionsModal());
+}
+
+if(instructionsBackdrop){
+  instructionsBackdrop.addEventListener('click', ()=> closeInstructionsModal());
+}
+
+document.addEventListener('keydown', (event)=>{
+  if(event.key === 'Escape' && instructionsModal && !instructionsModal.classList.contains('hidden')){
+    closeInstructionsModal();
+  }
+});
 
