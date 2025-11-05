@@ -640,7 +640,9 @@ function renderOptionCard(container, bars, idx){
   });
   container.appendChild(card);
   const rect = card.getBoundingClientRect();
-  const renderWidth = Math.max(360, Math.floor((rect.width || 0) - 32));
+  const availableWidth = rect.width || optionsContainer.clientWidth || 0;
+  const baseWidth = availableWidth > 0 ? Math.max(200, Math.floor(availableWidth - 24)) : 320;
+  const renderWidth = Math.min(480, baseWidth);
   const renderHeight = Math.max(120, Math.floor(renderWidth * 0.34));
   tryRenderRhythm(canvas, bars, {width:renderWidth, height:renderHeight});
 }
