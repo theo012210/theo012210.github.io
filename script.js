@@ -237,53 +237,128 @@ function scheduleClick(time, accent){
 }
 
 function schedulePrepCountSound(time, beatIndex, accent){
-  // 1-2-3-Go with distinct waveforms and pitched tones: C4, D4, E4, F4
-  const freqMap = [261.63, 293.66, 329.63, 349.23]; // C4, D4, E4, F4
-  const baseLevels = [0.46, 0.52, 0.48, 0.7];
+  // Count-in: three low thumps (kick-like) then a bright "Go" (high C6)
+  const C6 = 1046.5; // C6 in Hz
+  const THUMP = 60; // low thump frequency (kick-like)
+  const freqMap = [THUMP, THUMP, THUMP, C6];
+  // Increase thump levels for greater contrast with the metronome click
+  const baseLevels = [2.5, 2.5, 2.5, 0.95];
   const accentBoost = accent ? 0.18 : 0;
-  const waveforms = ['sine', 'square', 'triangle', 'sawtooth'];
+  // final 'Go' uses sawtooth for extra brightness
+  const waveforms = ['sine', 'sine', 'sine', 'sawtooth'];
 
-  // Tone part
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = waveforms[beatIndex] || 'square';
-  osc.frequency.setValueAtTime(freqMap[beatIndex] || 700, time);
-  gain.gain.setValueAtTime(0.0001, time);
-  const targetLevel = (baseLevels[beatIndex] || 0.5) + accentBoost;
-  gain.gain.exponentialRampToValueAtTime(targetLevel, time + 0.006);
-  const toneDecay = beatIndex === 3 ? 0.25 : 0.18;
-  gain.gain.exponentialRampToValueAtTime(0.0001, time + toneDecay);
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start(time);
-  osc.stop(time + toneDecay + 0.02);
-  osc.onended = ()=>{
-    gain.disconnect();
-  };
-  scheduledOscillators.push(osc);
+  // Tone / cymbal part
+  // Shorter decay for prep cymbals, longer for the final 'Go' tone+cymbal
+  const toneDecay = beatIndex === 3 ? 0.36 : 0.18;
 
-  // Add a tiny noise burst on "Go" to distinguish it further
-  if(beatIndex === 3){
+  // Make the first three prep beats into cymbals (louder)
+  if (beatIndex < 3) {
+    const dur = 0.18; // shorter cymbal burst for prep
     const sr = audioCtx.sampleRate;
-    const dur = 0.08; // 80ms
     const buffer = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
     const data = buffer.getChannelData(0);
-    for(let i=0; i<data.length; i++){
-      // Pink-ish noise via simple filter-ish accumulation
+    for (let i = 0; i < data.length; i++) {
       data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
     }
+
     const noise = audioCtx.createBufferSource();
     noise.buffer = buffer;
-    const nGain = audioCtx.createGain();
-    nGain.gain.setValueAtTime(0.0001, time);
-    nGain.gain.exponentialRampToValueAtTime(0.4, time + 0.003);
-    nGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.09);
-    noise.connect(nGain);
-    nGain.connect(audioCtx.destination);
+
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(3500, time);
+    hp.Q.setValueAtTime(0.7, time);
+
+    // metallic resonators for shimmer
+    const bp1 = audioCtx.createBiquadFilter(); bp1.type = 'bandpass'; bp1.frequency.setValueAtTime(7000, time); bp1.Q.setValueAtTime(6, time);
+    const bp2 = audioCtx.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.setValueAtTime(9000, time); bp2.Q.setValueAtTime(6, time);
+
+    const mixGain = audioCtx.createGain();
+    // louder for prep cymbals
+    const prepLevel = (baseLevels[beatIndex] || 1.0) * 1.2 + accentBoost;
+    mixGain.gain.setValueAtTime(0.0001, time);
+    mixGain.gain.linearRampToValueAtTime(prepLevel, time + 0.006);
+    mixGain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+
+    noise.connect(hp);
+    hp.connect(bp1);
+    hp.connect(bp2);
+    bp1.connect(mixGain);
+    bp2.connect(mixGain);
+    mixGain.connect(audioCtx.destination);
+
     noise.start(time);
-    noise.stop(time + 0.1);
-    noise.onended = ()=>{
-      nGain.disconnect();
+    noise.stop(time + dur + 0.02);
+    noise.onended = ()=>{ mixGain.disconnect(); bp1.disconnect(); bp2.disconnect(); hp.disconnect(); };
+    scheduledOscillators.push(noise);
+
+  } else {
+    // Final beat: keep bright tone (C6/saw) and a longer cymbal tail (existing approach)
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = waveforms[beatIndex] || 'sawtooth';
+    osc.frequency.setValueAtTime(freqMap[beatIndex] || 1046.5, time);
+    gain.gain.setValueAtTime(0.0001, time);
+    const targetLevel = (baseLevels[beatIndex] || 0.9) + accentBoost;
+    gain.gain.exponentialRampToValueAtTime(targetLevel, time + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + toneDecay);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(time);
+    osc.stop(time + toneDecay + 0.02);
+    osc.onended = ()=>{ gain.disconnect(); };
+    scheduledOscillators.push(osc);
+  }
+
+  // Add a cymbal-like burst on "Go" to distinguish it further
+  if (beatIndex === 3) {
+    const sr = audioCtx.sampleRate;
+    // longer noise buffer for cymbal shimmer
+    const dur = 0.28; // 280ms
+    const buffer = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      // slightly decaying white noise
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+
+    // Create a highpass to remove low end and give cymbal brightness
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(4000, time);
+    hp.Q.setValueAtTime(0.7, time);
+
+    // Add a couple of bandpass resonators to simulate metallic partials
+    const bp1 = audioCtx.createBiquadFilter(); bp1.type = 'bandpass'; bp1.frequency.setValueAtTime(7000, time); bp1.Q.setValueAtTime(6, time);
+    const bp2 = audioCtx.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.setValueAtTime(9000, time); bp2.Q.setValueAtTime(6, time);
+    const bp3 = audioCtx.createBiquadFilter(); bp3.type = 'bandpass'; bp3.frequency.setValueAtTime(11000, time); bp3.Q.setValueAtTime(5, time);
+
+    // Mix outputs
+    const mixGain = audioCtx.createGain();
+    mixGain.gain.setValueAtTime(0.0001, time);
+    // Attack quickly then decay over the duration
+    mixGain.gain.linearRampToValueAtTime(0.9, time + 0.006);
+    mixGain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+
+    // Route: noise -> hp -> (bp1->mix, bp2->mix, bp3->mix)
+    noise.connect(hp);
+    hp.connect(bp1);
+    hp.connect(bp2);
+    hp.connect(bp3);
+
+    bp1.connect(mixGain);
+    bp2.connect(mixGain);
+    bp3.connect(mixGain);
+
+    mixGain.connect(audioCtx.destination);
+
+    noise.start(time);
+    noise.stop(time + dur + 0.02);
+    noise.onended = () => {
+      mixGain.disconnect(); bp1.disconnect(); bp2.disconnect(); bp3.disconnect(); hp.disconnect();
     };
     scheduledOscillators.push(noise);
   }
