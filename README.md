@@ -4,7 +4,7 @@ This is a small rhythm-guessing web app intended for piano and singing tutors.
 
 Features
 - Four difficulty levels: Easy, Medium, Difficult, Expert
-- Generates a 2-bar rhythm per question following level rules, while the first two bars are prep beats
+- Generates a 2-bar rhythm per question following level rules, with a one‑bar 1‑2‑3‑Go count‑in
 - Renders rhythms visually using VexFlow (via CDN)
 - Presents 4 options (one correct + 3 distractors)
 - Bottom-left toast messages: green for "Correct!" and red for "Incorrect! The correct option is option X"

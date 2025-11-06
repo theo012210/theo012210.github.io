@@ -7,6 +7,16 @@ h1{margin:0 0 12px}
 #renderer{background:linear-gradient(180deg,#fff,#f9fbfd);border:1px solid #ddd;padding:12px;border-radius:6px}
 #options{margin-top:16px}
 #optionsContainer{display:flex;flex-direction:column;gap:16px;margin-top:24px}
+@media (max-width: 768px) {
+  #optionsContainer {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .optionCard {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 250px;
+  }
+}
 .note-weight-controls{display:flex;flex-direction:column;gap:14px}
 .note-weight-row{background:var(--card);border:1px solid #ddd;padding:12px 14px;border-radius:8px;display:flex;flex-direction:column;gap:10px}
 .note-weight-header{display:flex;justify-content:space-between;align-items:center;font-size:.85rem;font-weight:600;color:#333}
@@ -14,10 +24,10 @@ h1{margin:0 0 12px}
 .note-weight-row input[type=range]{width:100%}
 #noteFrequency{margin-top:24px}
 #noteFrequency h2{margin:0 0 12px;font-size:1.15rem}
-.optionCard{background:var(--card);border:1px solid #ddd;padding:16px;border-radius:8px;cursor:pointer;transition:transform .08s,box-shadow .08s;display:flex;flex-direction:column;gap:12px;width:100%}
+.optionCard{background:var(--card);border:1px solid #ddd;padding:16px;border-radius:8px;cursor:pointer;transition:transform .08s,box-shadow .08s;display:flex;flex-direction:column;gap:12px;width:100%;overflow:hidden}
 .optionLabel{font-size:.85rem;font-weight:600;color:#333}
 .optionCard:hover{transform:translateY(-3px);box-shadow:0 6px 18px rgba(0,0,0,.06)}
-.optionRenderer{width:100%;min-height:140px}
+.optionRenderer{width:100%;min-height:auto;overflow:hidden}
 .optionRenderer svg{width:100%;height:auto;display:block}
 .fallbackRhythm{display:flex;flex-direction:column;gap:4px;font-size:.78rem;background:#fef6f6;border:1px dashed #f3b6b6;padding:6px;border-radius:4px;color:#7a1c1c}
 .fallbackBar{display:flex;gap:8px;align-items:flex-start}
