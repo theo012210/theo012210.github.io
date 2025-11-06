@@ -461,7 +461,45 @@ function generateForLevel(levelKey){
       return null;
     }
 
-    return tokens.sort(()=>Math.random() - 0.5);
+    // We must ensure triplets are not placed starting on the 'n' (off-beat) positions
+    // when we divide the bar into 8 quavers. Off-beat quaver boundaries occur at
+    // unit offsets 4, 12, 20, 28 (i.e. startUnit % UNITS_PER_QUARTER === UNITS_PER_QUARTER/2).
+    // To enforce this, try to find a random ordering of the chosen tokens such that
+    // no triplet token begins on an off-beat. If no ordering is found after several
+    // attempts, return null so the caller will try a new fill.
+    function shuffleArray(arr){
+      for(let i = arr.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+      }
+      return arr;
+    }
+
+    function orderTokensAvoidingOffbeatTriplets(tokenList){
+      const MAX_ATTEMPTS = 300;
+      for(let attempt = 0; attempt < MAX_ATTEMPTS; attempt++){
+        const perm = shuffleArray(tokenList.slice());
+        let used = 0;
+        let ok = true;
+        for(const t of perm){
+          if(t.isTriplet){
+            // start unit within the bar
+            const startUnit = used;
+            if((startUnit % UNITS_PER_QUARTER) === (UNITS_PER_QUARTER / 2)){
+              ok = false;
+              break;
+            }
+          }
+          used += t.units;
+        }
+        if(ok) return perm;
+      }
+      return null;
+    }
+
+    const ordered = orderTokensAvoidingOffbeatTriplets(tokens);
+    if(!ordered) return null;
+    return ordered;
   }
 
   function distributeRequiredTokens(){
