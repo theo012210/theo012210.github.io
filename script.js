@@ -577,8 +577,9 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
       const tripletBeams = tripletGroups.map(group => new VF.Beam(group));
       const beams = straightBeams.concat(tripletBeams);
 
-      const formatter = new VF.Formatter().joinVoices([voice]);
-      const formatWidth = shouldWrap ? opts.width - 40 : opts.width - 60;
+  const formatter = new VF.Formatter().joinVoices([voice]);
+  // Leave a small right-side gap so beams/tuplets don't collide with barlines
+  const formatWidth = shouldWrap ? opts.width - 40 : opts.width - 80;
       formatter.format([voice], formatWidth);
       voice.draw(context, stave);
 
@@ -646,8 +647,9 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
     voice.setMode(VF.Voice.Mode.SOFT);
     voice.addTickables(allNotes);
 
-    const formatter = new VF.Formatter().joinVoices([voice]);
-    const formatWidth = shouldWrap ? opts.width - 40 : opts.width - 60;
+  const formatter = new VF.Formatter().joinVoices([voice]);
+  // Reduce the formatting width slightly to reserve right padding and avoid overlap
+  const formatWidth = shouldWrap ? opts.width - 40 : opts.width - 80;
     formatter.format([voice], formatWidth);
     voice.draw(context, stave);
 
