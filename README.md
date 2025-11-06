@@ -19,3 +19,13 @@ Notes & assumptions
 - Medium includes minim to quaver but no triplets
 - Difficult includes all from medium in addition to that, semiquaver and triplets.
 - Expert includes crotchet to semiquaver.
+
+## Responsive layout
+
+The options area that shows the notation choices is responsive:
+
+- On wide screens, option cards flex to fill the row.
+- Around tablet width (≤ 900px), cards prefer a two-column layout.
+- On small screens (≤ 520px), cards stack in a single column.
+
+The SVG notation scales to the card width via CSS, so content remains readable as the window narrows.

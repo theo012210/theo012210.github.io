@@ -171,6 +171,7 @@ initializeNoteWeightControls();
 
 let currentCorrectIndex = null;
 let currentRhythm = null;
+let currentOptions = null;
 let attemptsRemaining = 3;
 let audioCtx = null;
 let scheduledOscillators = [];
@@ -178,7 +179,8 @@ let playbackTimeout = null;
 let isPlaying = false;
 const TEMPO_BPM = 96;
 const secondsPerUnit = (60 / TEMPO_BPM) / UNITS_PER_QUARTER;
-const PREP_BARS = 2;
+// Change prep to 1 bar and make it a 1-2-3-Go style with distinct sounds
+const PREP_BARS = 1;
 
 function ensureAudioContext(){
   if(!audioCtx){
@@ -216,6 +218,7 @@ function stopPlayback(){
 }
 
 function scheduleClick(time, accent){
+  // Generic metronome click (used for main rhythm)
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   osc.type = 'square';
@@ -231,6 +234,57 @@ function scheduleClick(time, accent){
     gain.disconnect();
   };
   scheduledOscillators.push(osc);
+}
+
+function schedulePrepCountSound(time, beatIndex){
+  // 1-2-3-Go with distinct waveforms and pitched tones: C4, D4, E4, F4
+  const freqMap = [261.63, 293.66, 329.63, 349.23]; // C4, D4, E4, F4
+  const levelMap = [0.5, 0.55, 0.6, 0.7];
+  const waveforms = ['sine', 'square', 'triangle', 'sawtooth'];
+
+  // Tone part
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = waveforms[beatIndex] || 'square';
+  osc.frequency.setValueAtTime(freqMap[beatIndex] || 700, time);
+  gain.gain.setValueAtTime(0.0001, time);
+  gain.gain.exponentialRampToValueAtTime(levelMap[beatIndex] || 0.5, time + 0.006);
+  const toneDecay = beatIndex === 3 ? 0.25 : 0.18;
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + toneDecay);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(time);
+  osc.stop(time + toneDecay + 0.02);
+  osc.onended = ()=>{
+    gain.disconnect();
+  };
+  scheduledOscillators.push(osc);
+
+  // Add a tiny noise burst on "Go" to distinguish it further
+  if(beatIndex === 3){
+    const sr = audioCtx.sampleRate;
+    const dur = 0.08; // 80ms
+    const buffer = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
+    const data = buffer.getChannelData(0);
+    for(let i=0; i<data.length; i++){
+      // Pink-ish noise via simple filter-ish accumulation
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const nGain = audioCtx.createGain();
+    nGain.gain.setValueAtTime(0.0001, time);
+    nGain.gain.exponentialRampToValueAtTime(0.4, time + 0.003);
+    nGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.09);
+    noise.connect(nGain);
+    nGain.connect(audioCtx.destination);
+    noise.start(time);
+    noise.stop(time + 0.1);
+    noise.onended = ()=>{
+      nGain.disconnect();
+    };
+    scheduledOscillators.push(noise);
+  }
 }
 
 function playRhythm(bars){
@@ -251,8 +305,8 @@ function playRhythm(bars){
   const prepBeats = PREP_BARS * 4;
   const beatDurationSeconds = UNITS_PER_QUARTER * secondsPerUnit;
   for(let beat = 0; beat < prepBeats; beat++){
-    const accent = beat % 4 === 0;
-    scheduleClick(cursor, accent);
+    // Distinct 1-2-3-Go sounds
+    schedulePrepCountSound(cursor, beat % 4);
     cursor += beatDurationSeconds;
   }
 
@@ -460,100 +514,218 @@ function generateForLevel(levelKey){
 }
 
 // Convert our token representation into VexFlow StaveNotes and tuplets
-function renderRhythmInto(div, bars, opts={width:600, height:140}){
+function renderRhythmInto(div, bars, opts={width:600, height:120}){
   div.innerHTML='';
   if(!window.Vex || !Vex.Flow){
     throw new Error('VexFlow library is not available.');
   }
   const VF = Vex.Flow;
+  const TUPLET_Y_SHIFT = -32;
+
+  const STAVE_HEIGHT = 80;
+  const STAVE_Y_PAD = 20;
+  const STAVE_TOP_EXTRA = Math.max(0, Math.abs(TUPLET_Y_SHIFT) - 8);
+  const SINGLE_LINE_BREAKPOINT = 500;
+  const shouldWrap = opts.width < SINGLE_LINE_BREAKPOINT && bars.length > 1;
+  const numStaves = shouldWrap ? bars.length : 1;
+  const requiredHeight = numStaves * STAVE_HEIGHT + STAVE_Y_PAD + STAVE_TOP_EXTRA + STAVE_Y_PAD;
+
   const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
-  renderer.resize(opts.width, opts.height);
+  renderer.resize(opts.width, requiredHeight);
   const context = renderer.getContext();
   context.setFont('Arial', 10, 'normal');
 
-  const staff = new VF.Stave(10, 10, opts.width-20);
-  staff.addClef('percussion');
-  staff.setContext(context).draw();
-
-  const allTuplets = [];
-  const barNotes = [];
-  const beams = [];
-  const beamableDurations = new Set(['8','16']);
-
-  let allNotes = [];
-
-  for(const bar of bars){
-    const notes = [];
-    let beamRun = [];
-    for(const token of bar){
-      if(token.isTriplet){
-        const n1 = new VF.StaveNote({keys:['b/4'], duration:'8'});
-        const n2 = new VF.StaveNote({keys:['b/4'], duration:'8'});
-        const n3 = new VF.StaveNote({keys:['b/4'], duration:'8'});
-        const tupleNotes = [n1,n2,n3];
-        notes.push(n1,n2,n3);
-        allTuplets.push(new VF.Tuplet(tupleNotes));
-        beams.push(new VF.Beam(tupleNotes));
-        if(beamRun.length > 1){
-          beams.push(new VF.Beam(beamRun));
-        }
-        beamRun = [];
-      } else {
-        const dur = token.vfDur || (()=>{
-          for(const k in TYPES) if(TYPES[k].units===token.units) return TYPES[k].vfDur;
-          return 'q';
-        })();
-        const st = new VF.StaveNote({keys:['b/4'], duration:dur});
-        if(token.dots){
-          for(let d=0; d<token.dots; d++) st.addDotToAll();
-        }
-        notes.push(st);
-        if(beamableDurations.has(st.getDuration())){
-          beamRun.push(st);
-        } else if(beamRun.length > 1){
-          beams.push(new VF.Beam(beamRun));
-          beamRun = [];
-        } else {
-          beamRun = [];
-        }
+  if (shouldWrap) {
+    // Render each bar on its own stave (line)
+    let staveY = STAVE_Y_PAD + STAVE_TOP_EXTRA;
+    for (const bar of bars) {
+      const stave = new VF.Stave(10, staveY, opts.width - 20);
+      if (staveY === STAVE_Y_PAD + STAVE_TOP_EXTRA) {
+        stave.addClef('percussion');
       }
+      stave.setContext(context).draw();
+
+      const { notes, tuplets, ties, tripletGroups } = processBar(bar, VF);
+      const voice = new VF.Voice({ num_beats: 4, beat_value: 4 });
+      voice.setMode(VF.Voice.Mode.SOFT);
+      voice.addTickables(notes);
+
+      const noteGroups = [];
+      let currentGroup = [];
+      notes.forEach(note => {
+        if (note.isTripletPart) {
+          if (currentGroup.length > 0) {
+            noteGroups.push(currentGroup);
+            currentGroup = [];
+          }
+        } else {
+          currentGroup.push(note);
+        }
+      });
+      if (currentGroup.length > 0) {
+        noteGroups.push(currentGroup);
+      }
+
+      const straightBeams = noteGroups.flatMap(group => VF.Beam.generateBeams(group, {
+        groups: [new VF.Fraction(2, 8)]
+      }));
+      const tripletBeams = tripletGroups.map(group => new VF.Beam(group));
+      const beams = straightBeams.concat(tripletBeams);
+
+      const formatter = new VF.Formatter().joinVoices([voice]);
+      const formatWidth = shouldWrap ? opts.width - 40 : opts.width - 60;
+      formatter.format([voice], formatWidth);
+      voice.draw(context, stave);
+
+      for (const t of tuplets) {
+        t.setTupletLocation(VF.Tuplet.LOCATION_TOP);
+        if(typeof t.setYShift === 'function'){
+          t.setYShift(TUPLET_Y_SHIFT);
+        } else if(t.render_options){
+          t.render_options.y_shift = TUPLET_Y_SHIFT;
+        }
+        t.setContext(context).draw();
+      }
+      beams.forEach(b => b.setContext(context).draw());
+      for (const tie of ties) {
+        tie.setContext(context).draw();
+      }
+
+      staveY += STAVE_HEIGHT;
     }
-    if(beamRun.length > 1){
-      beams.push(new VF.Beam(beamRun));
+  } else {
+    // Render all bars on a single stave
+  const stave = new VF.Stave(10, STAVE_Y_PAD + STAVE_TOP_EXTRA, opts.width - 20);
+    stave.addClef('percussion');
+    stave.setContext(context).draw();
+
+    const allTuplets = [];
+    const allTies = [];
+    const barNotes = [];
+    const allBeams = [];
+    let allNotes = [];
+
+    for (const bar of bars) {
+      const { notes, tuplets, ties, tripletGroups } = processBar(bar, VF);
+      allNotes = allNotes.concat(notes);
+      allTuplets.push(...tuplets);
+      allTies.push(...ties);
+      barNotes.push(notes);
+      
+      const noteGroups = [];
+      let currentGroup = [];
+      notes.forEach(note => {
+        if (note.isTripletPart) {
+          if (currentGroup.length > 0) {
+            noteGroups.push(currentGroup);
+            currentGroup = [];
+          }
+        } else {
+          currentGroup.push(note);
+        }
+      });
+      if (currentGroup.length > 0) {
+        noteGroups.push(currentGroup);
+      }
+
+      const straightBeams = noteGroups.flatMap(group => VF.Beam.generateBeams(group, {
+        groups: [new VF.Fraction(2, 8)]
+      }));
+      const tripletBeams = tripletGroups.map(group => new VF.Beam(group));
+      const beams = straightBeams.concat(tripletBeams);
+      allBeams.push(...beams);
     }
-    allNotes = allNotes.concat(notes);
-    barNotes.push(notes);
+
+    const voice = new VF.Voice({ num_beats: bars.length * 4, beat_value: 4 });
+    voice.setMode(VF.Voice.Mode.SOFT);
+    voice.addTickables(allNotes);
+
+    const formatter = new VF.Formatter().joinVoices([voice]);
+    const formatWidth = shouldWrap ? opts.width - 40 : opts.width - 60;
+    formatter.format([voice], formatWidth);
+    voice.draw(context, stave);
+
+    for (const t of allTuplets) {
+      t.setTupletLocation(VF.Tuplet.LOCATION_TOP);
+      if(typeof t.setYShift === 'function'){
+        t.setYShift(TUPLET_Y_SHIFT);
+      } else if(t.render_options){
+        t.render_options.y_shift = TUPLET_Y_SHIFT;
+      }
+      t.setContext(context).draw();
+    }
+    allBeams.forEach(b => b.setContext(context).draw());
+    for (const tie of allTies) {
+      tie.setContext(context).draw();
+    }
+
+    if (bars.length > 1) {
+      const topY = stave.getYForLine(0) - 1;
+      const bottomY = stave.getYForLine(stave.getNumLines() - 1) + 1;
+      context.save();
+      context.setStrokeStyle('#111');
+      context.setLineWidth(1.2);
+      for (let i = 1; i < barNotes.length; i++) {
+        const notesInBar = barNotes[i];
+        if (!notesInBar.length) continue;
+        const firstNote = notesInBar[0];
+        const x = Math.max(stave.getX() + 6, firstNote.getAbsoluteX() - 12);
+        context.beginPath();
+        context.moveTo(x, topY);
+        context.lineTo(x, bottomY);
+        context.stroke();
+      }
+      context.restore();
+    }
+  }
+}
+
+function processBar(bar, VF) {
+  const notes = [];
+  const tuplets = [];
+  const ties = [];
+  const tripletGroups = [];
+  let currentBeat = 0;
+
+  for (const token of bar) {
+    const tokenUnits = token.units;
+    const tokenStartUnit = currentBeat * UNITS_PER_QUARTER;
+    const tokenEndUnit = tokenStartUnit + tokenUnits;
+
+    if (token.isTriplet) {
+      const tripletNotes = [
+        new VF.StaveNote({ keys: ['b/4'], duration: '8' }),
+        new VF.StaveNote({ keys: ['b/4'], duration: '8' }),
+        new VF.StaveNote({ keys: ['b/4'], duration: '8' }),
+      ];
+      tripletNotes.forEach(n => {
+        n.isTripletPart = true;
+        n.setStemDirection(1);
+      });
+      notes.push(...tripletNotes);
+      tuplets.push(new VF.Tuplet(tripletNotes));
+      tripletGroups.push(tripletNotes);
+    } else {
+      const dur = token.vfDur || (() => {
+        for (const k in TYPES) if (TYPES[k].units === token.units) return TYPES[k].vfDur;
+        return 'q';
+      })();
+      
+      const note = new VF.StaveNote({ keys: ['b/4'], duration: dur });
+      note.setStemDirection(1);
+      if (token.dots) {
+        for (let d = 0; d < token.dots; d++) note.addDotToAll();
+      }
+      notes.push(note);
+    }
+    currentBeat += tokenUnits / UNITS_PER_QUARTER;
   }
 
-  const voice = new VF.Voice({num_beats: 8,  beat_value: 4});
-  voice.setMode(VF.Voice.Mode.SOFT);
-  voice.addTickables(allNotes);
+  // This is a simplified placeholder for tie logic.
+  // A full implementation would need to split notes that cross beat boundaries.
+  // For now, we'll just return an empty ties array.
 
-  const formatter = new VF.Formatter();
-  formatter.joinVoices([voice]).format([voice], opts.width-60);
-  voice.draw(context, staff);
-
-  for(const t of allTuplets) t.setContext(context).draw();
-  for(const b of beams) b.setContext(context).draw();
-
-  if(bars.length > 1){
-    const topY = staff.getYForLine(0) - 1;
-    const bottomY = staff.getYForLine(staff.getNumLines() - 1) + 1;
-    context.save();
-    context.setStrokeStyle('#111');
-    context.setLineWidth(1.2);
-    for(let i=1;i<barNotes.length;i++){
-      const notes = barNotes[i];
-      if(!notes.length) continue;
-      const firstNote = notes[0];
-      const x = Math.max(staff.getX() + 6, firstNote.getAbsoluteX() - 12);
-      context.beginPath();
-      context.moveTo(x, topY);
-      context.lineTo(x, bottomY);
-      context.stroke();
-    }
-    context.restore();
-  }
+  return { notes, tuplets, ties, tripletGroups };
 }
 
 function tokenLabel(token){
@@ -629,9 +801,63 @@ function showToast(text, ok=true){
   });
 }
 
+function getCardRenderWidth(card){
+  if(!card){
+    return null;
+  }
+  const cardRectWidth = card.getBoundingClientRect ? card.getBoundingClientRect().width : 0;
+  const containerRectWidth = optionsContainer && optionsContainer.getBoundingClientRect
+    ? optionsContainer.getBoundingClientRect().width
+    : (optionsContainer ? optionsContainer.clientWidth : 0);
+  const referenceWidth = cardRectWidth && cardRectWidth > 0 ? cardRectWidth : containerRectWidth;
+  if(!referenceWidth || referenceWidth <= 0){
+    return null;
+  }
+  let computedPadding = 0;
+  if(typeof window !== 'undefined' && window.getComputedStyle){
+    const styles = window.getComputedStyle(card);
+    const paddingLeft = parseFloat(styles.paddingLeft) || 0;
+    const paddingRight = parseFloat(styles.paddingRight) || 0;
+    computedPadding = paddingLeft + paddingRight;
+  }
+  const available = referenceWidth - computedPadding;
+  const candidate = Number.isFinite(available) && available > 0 ? available : referenceWidth;
+  return Math.max(120, Math.floor(candidate));
+}
+
+function renderRhythmForCard(card, bars){
+  if(!card) return;
+  const canvas = card.querySelector('.optionRenderer');
+  if(!canvas) return;
+  const renderWidth = getCardRenderWidth(card);
+  if(!renderWidth){
+    requestAnimationFrame(()=>renderRhythmForCard(card, bars));
+    return;
+  }
+  tryRenderRhythm(canvas, bars, {width:renderWidth, height:120});
+}
+
+function rerenderOptionCards(){
+  if(!currentOptions || !Array.isArray(currentOptions)){
+    return;
+  }
+  if(!optionsContainer){
+    return;
+  }
+  const cards = optionsContainer.querySelectorAll('.optionCard');
+  Array.from(cards).forEach(card=>{
+    const idx = Number(card.dataset.optionIndex);
+    const bars = currentOptions[idx];
+    if(bars){
+      renderRhythmForCard(card, bars);
+    }
+  });
+}
+
 function renderOptionCard(container, bars, idx){
   const card = document.createElement('div');
   card.className='optionCard';
+  card.dataset.optionIndex = String(idx);
   const label = document.createElement('div');
   label.className = 'optionLabel';
   label.textContent = `Option ${idx+1}`;
@@ -661,11 +887,7 @@ function renderOptionCard(container, bars, idx){
     }
   });
   container.appendChild(card);
-  const rect = card.getBoundingClientRect();
-  const availableWidth = rect.width || optionsContainer.clientWidth || 0;
-  const renderWidth = availableWidth > 0 ? Math.max(200, Math.floor(availableWidth - 25)) : 320;
-  const renderHeight = Math.max(120, Math.floor(renderWidth * 0.34));
-  tryRenderRhythm(canvas, bars, {width:renderWidth, height:renderHeight});
+  renderRhythmForCard(card, bars);
 }
 
 function newQuestion(){
@@ -680,6 +902,7 @@ function newQuestion(){
   currentCorrectIndex = correctIndex;
   attemptsRemaining = 3;
   currentRhythm = options[correctIndex];
+  currentOptions = options;
   if(isPlaying) stopPlayback();
 
   if(vfContainer){
@@ -722,5 +945,16 @@ document.addEventListener('keydown', (event)=>{
   if(event.key === 'Escape' && instructionsModal && !instructionsModal.classList.contains('hidden')){
     closeInstructionsModal();
   }
+});
+
+let resizeAnimationFrame = null;
+window.addEventListener('resize', ()=>{
+  if(resizeAnimationFrame){
+    cancelAnimationFrame(resizeAnimationFrame);
+  }
+  resizeAnimationFrame = requestAnimationFrame(()=>{
+    resizeAnimationFrame = null;
+    rerenderOptionCards();
+  });
 });
 
