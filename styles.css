@@ -17,8 +17,8 @@ h1{margin:0 0 12px}
 .optionCard{background:var(--card);border:1px solid #ddd;padding:16px;border-radius:8px;cursor:pointer;transition:transform .08s,box-shadow .08s;display:flex;flex-direction:column;gap:12px;width:100%}
 .optionLabel{font-size:.85rem;font-weight:600;color:#333}
 .optionCard:hover{transform:translateY(-3px);box-shadow:0 6px 18px rgba(0,0,0,.06)}
-.optionRenderer{width:100%;min-height:auto}
-.optionRenderer svg{width:100%;height:auto;display:block}
+.optionRenderer{width:100%;min-height:auto;overflow:hidden}
+.optionRenderer svg{width:100%;height:auto;display:block;overflow:hidden}
 .fallbackRhythm{display:flex;flex-direction:column;gap:4px;font-size:.78rem;background:#fef6f6;border:1px dashed #f3b6b6;padding:6px;border-radius:4px;color:#7a1c1c}
 .fallbackBar{display:flex;gap:8px;align-items:flex-start}
 .fallbackBarLabel{font-weight:600;min-width:46px}
@@ -71,3 +71,9 @@ small.hint{display:block;color:#666;margin-top:6px}
 .modal-close{position:absolute;top:10px;right:10px;border:none;background:transparent;font-size:26px;line-height:1;color:#777;cursor:pointer}
 .modal-close:hover{color:#333}
 .modal-backdrop{position:absolute;inset:0;background:rgba(16,23,42,.55)}
+
+/* VexFlow debug panel */
+.vf-debug{position:fixed;right:12px;bottom:12px;z-index:200000;background:#fff;border:1px solid #e6eef6;padding:8px 10px;border-radius:8px;box-shadow:0 8px 20px rgba(0,0,0,.08);font-size:12px;color:#16324a;max-width:320px}
+.vf-debug strong{display:block;margin-bottom:6px}
+.vf-debug .vf-debug-log{max-height:220px;overflow:auto}
+.vf-debug .vf-debug-log div{padding:2px 0;border-top:1px dashed rgba(0,0,0,.03)}
