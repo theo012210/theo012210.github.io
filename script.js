@@ -668,38 +668,16 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
     }
 
     if (bars.length > 1) {
-      // Draw barlines between each bar. To avoid beams/stems overlapping the barline
-      // we compute evenly spaced division points across the stave width but ensure
-      // each barline is to the right of the previous bar's last note (with a small
-      // safety margin). Also clamp to the stave bounds so barlines stay visible.
       const topY = stave.getYForLine(0) - 1;
       const bottomY = stave.getYForLine(stave.getNumLines() - 1) + 1;
-      const staveX = stave.getX();
-      const staveW = stave.getWidth();
-      const divisions = barNotes.length;
       context.save();
       context.setStrokeStyle('#111');
       context.setLineWidth(1.2);
-      for (let i = 1; i < divisions; i++) {
-        // candidate position based on even division
-        const candidateX = staveX + Math.round((staveW / divisions) * i);
-
-        // ensure it's to the right of the previous bar's last note
-        const prevNotes = barNotes[i - 1] || [];
-        let prevRight = staveX + 6;
-        if (prevNotes.length) {
-          const lastNote = prevNotes[prevNotes.length - 1];
-          try {
-            prevRight = Math.max(prevRight, lastNote.getAbsoluteX() + 6);
-          } catch (e) {
-            // Ignore – fall back to division candidate
-          }
-        }
-
-        // final x is the max of candidate or prevRight, clamped inside the stave
-        const margin = 6;
-        const x = Math.min(staveX + staveW - margin, Math.max(candidateX, prevRight + 4));
-
+      for (let i = 1; i < barNotes.length; i++) {
+        const notesInBar = barNotes[i];
+        if (!notesInBar.length) continue;
+        const firstNote = notesInBar[0];
+        const x = Math.max(stave.getX() + 6, firstNote.getAbsoluteX() - 12);
         context.beginPath();
         context.moveTo(x, topY);
         context.lineTo(x, bottomY);
