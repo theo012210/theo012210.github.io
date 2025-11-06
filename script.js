@@ -236,10 +236,11 @@ function scheduleClick(time, accent){
   scheduledOscillators.push(osc);
 }
 
-function schedulePrepCountSound(time, beatIndex){
+function schedulePrepCountSound(time, beatIndex, accent){
   // 1-2-3-Go with distinct waveforms and pitched tones: C4, D4, E4, F4
   const freqMap = [261.63, 293.66, 329.63, 349.23]; // C4, D4, E4, F4
-  const levelMap = [0.5, 0.55, 0.6, 0.7];
+  const baseLevels = [0.46, 0.52, 0.48, 0.7];
+  const accentBoost = accent ? 0.18 : 0;
   const waveforms = ['sine', 'square', 'triangle', 'sawtooth'];
 
   // Tone part
@@ -248,7 +249,8 @@ function schedulePrepCountSound(time, beatIndex){
   osc.type = waveforms[beatIndex] || 'square';
   osc.frequency.setValueAtTime(freqMap[beatIndex] || 700, time);
   gain.gain.setValueAtTime(0.0001, time);
-  gain.gain.exponentialRampToValueAtTime(levelMap[beatIndex] || 0.5, time + 0.006);
+  const targetLevel = (baseLevels[beatIndex] || 0.5) + accentBoost;
+  gain.gain.exponentialRampToValueAtTime(targetLevel, time + 0.006);
   const toneDecay = beatIndex === 3 ? 0.25 : 0.18;
   gain.gain.exponentialRampToValueAtTime(0.0001, time + toneDecay);
   osc.connect(gain);
@@ -305,8 +307,10 @@ function playRhythm(bars){
   const prepBeats = PREP_BARS * 4;
   const beatDurationSeconds = UNITS_PER_QUARTER * secondsPerUnit;
   for(let beat = 0; beat < prepBeats; beat++){
-    // Distinct 1-2-3-Go sounds
-    schedulePrepCountSound(cursor, beat % 4);
+    // Distinct 1-2-3-Go sounds with accents on beats 1 and 3
+    const beatIndex = beat % 4;
+    const shouldAccent = beatIndex === 0 || beatIndex === 2;
+    schedulePrepCountSound(cursor, beatIndex, shouldAccent);
     cursor += beatDurationSeconds;
   }
 
@@ -542,6 +546,7 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
       const stave = new VF.Stave(10, staveY, opts.width - 20);
       if (staveY === STAVE_Y_PAD + STAVE_TOP_EXTRA) {
         stave.addClef('percussion');
+        stave.addTimeSignature('4/4');
       }
       stave.setContext(context).draw();
 
@@ -595,8 +600,9 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
     }
   } else {
     // Render all bars on a single stave
-  const stave = new VF.Stave(10, STAVE_Y_PAD + STAVE_TOP_EXTRA, opts.width - 20);
+    const stave = new VF.Stave(10, STAVE_Y_PAD + STAVE_TOP_EXTRA, opts.width - 20);
     stave.addClef('percussion');
+    stave.addTimeSignature('4/4');
     stave.setContext(context).draw();
 
     const allTuplets = [];
