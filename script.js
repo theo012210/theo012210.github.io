@@ -237,53 +237,128 @@ function scheduleClick(time, accent){
 }
 
 function schedulePrepCountSound(time, beatIndex, accent){
-  // 1-2-3-Go with distinct waveforms and pitched tones: C4, D4, E4, F4
-  const freqMap = [261.63, 293.66, 329.63, 349.23]; // C4, D4, E4, F4
-  const baseLevels = [0.46, 0.52, 0.48, 0.7];
+  // Count-in: three low thumps (kick-like) then a bright "Go" (high C6)
+  const C6 = 1046.5; // C6 in Hz
+  const THUMP = 60; // low thump frequency (kick-like)
+  const freqMap = [THUMP, THUMP, THUMP, C6];
+  // Increase thump levels for greater contrast with the metronome click
+  const baseLevels = [2.5, 2.5, 2.5, 0.95];
   const accentBoost = accent ? 0.18 : 0;
-  const waveforms = ['sine', 'square', 'triangle', 'sawtooth'];
+  // final 'Go' uses sawtooth for extra brightness
+  const waveforms = ['sine', 'sine', 'sine', 'sawtooth'];
 
-  // Tone part
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = waveforms[beatIndex] || 'square';
-  osc.frequency.setValueAtTime(freqMap[beatIndex] || 700, time);
-  gain.gain.setValueAtTime(0.0001, time);
-  const targetLevel = (baseLevels[beatIndex] || 0.5) + accentBoost;
-  gain.gain.exponentialRampToValueAtTime(targetLevel, time + 0.006);
-  const toneDecay = beatIndex === 3 ? 0.25 : 0.18;
-  gain.gain.exponentialRampToValueAtTime(0.0001, time + toneDecay);
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start(time);
-  osc.stop(time + toneDecay + 0.02);
-  osc.onended = ()=>{
-    gain.disconnect();
-  };
-  scheduledOscillators.push(osc);
+  // Tone / cymbal part
+  // Shorter decay for prep cymbals, longer for the final 'Go' tone+cymbal
+  const toneDecay = beatIndex === 3 ? 0.36 : 0.18;
 
-  // Add a tiny noise burst on "Go" to distinguish it further
-  if(beatIndex === 3){
+  // Make the first three prep beats into cymbals (louder)
+  if (beatIndex < 3) {
+    const dur = 0.18; // shorter cymbal burst for prep
     const sr = audioCtx.sampleRate;
-    const dur = 0.08; // 80ms
     const buffer = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
     const data = buffer.getChannelData(0);
-    for(let i=0; i<data.length; i++){
-      // Pink-ish noise via simple filter-ish accumulation
+    for (let i = 0; i < data.length; i++) {
       data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
     }
+
     const noise = audioCtx.createBufferSource();
     noise.buffer = buffer;
-    const nGain = audioCtx.createGain();
-    nGain.gain.setValueAtTime(0.0001, time);
-    nGain.gain.exponentialRampToValueAtTime(0.4, time + 0.003);
-    nGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.09);
-    noise.connect(nGain);
-    nGain.connect(audioCtx.destination);
+
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(3500, time);
+    hp.Q.setValueAtTime(0.7, time);
+
+    // metallic resonators for shimmer
+    const bp1 = audioCtx.createBiquadFilter(); bp1.type = 'bandpass'; bp1.frequency.setValueAtTime(7000, time); bp1.Q.setValueAtTime(6, time);
+    const bp2 = audioCtx.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.setValueAtTime(9000, time); bp2.Q.setValueAtTime(6, time);
+
+    const mixGain = audioCtx.createGain();
+    // louder for prep cymbals
+    const prepLevel = (baseLevels[beatIndex] || 1.0) * 1.2 + accentBoost;
+    mixGain.gain.setValueAtTime(0.0001, time);
+    mixGain.gain.linearRampToValueAtTime(prepLevel, time + 0.006);
+    mixGain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+
+    noise.connect(hp);
+    hp.connect(bp1);
+    hp.connect(bp2);
+    bp1.connect(mixGain);
+    bp2.connect(mixGain);
+    mixGain.connect(audioCtx.destination);
+
     noise.start(time);
-    noise.stop(time + 0.1);
-    noise.onended = ()=>{
-      nGain.disconnect();
+    noise.stop(time + dur + 0.02);
+    noise.onended = ()=>{ mixGain.disconnect(); bp1.disconnect(); bp2.disconnect(); hp.disconnect(); };
+    scheduledOscillators.push(noise);
+
+  } else {
+    // Final beat: keep bright tone (C6/saw) and a longer cymbal tail (existing approach)
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = waveforms[beatIndex] || 'sawtooth';
+    osc.frequency.setValueAtTime(freqMap[beatIndex] || 1046.5, time);
+    gain.gain.setValueAtTime(0.0001, time);
+    const targetLevel = (baseLevels[beatIndex] || 0.9) + accentBoost;
+    gain.gain.exponentialRampToValueAtTime(targetLevel, time + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + toneDecay);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(time);
+    osc.stop(time + toneDecay + 0.02);
+    osc.onended = ()=>{ gain.disconnect(); };
+    scheduledOscillators.push(osc);
+  }
+
+  // Add a cymbal-like burst on "Go" to distinguish it further
+  if (beatIndex === 3) {
+    const sr = audioCtx.sampleRate;
+    // longer noise buffer for cymbal shimmer
+    const dur = 0.28; // 280ms
+    const buffer = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      // slightly decaying white noise
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+
+    // Create a highpass to remove low end and give cymbal brightness
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.setValueAtTime(4000, time);
+    hp.Q.setValueAtTime(0.7, time);
+
+    // Add a couple of bandpass resonators to simulate metallic partials
+    const bp1 = audioCtx.createBiquadFilter(); bp1.type = 'bandpass'; bp1.frequency.setValueAtTime(7000, time); bp1.Q.setValueAtTime(6, time);
+    const bp2 = audioCtx.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.setValueAtTime(9000, time); bp2.Q.setValueAtTime(6, time);
+    const bp3 = audioCtx.createBiquadFilter(); bp3.type = 'bandpass'; bp3.frequency.setValueAtTime(11000, time); bp3.Q.setValueAtTime(5, time);
+
+    // Mix outputs
+    const mixGain = audioCtx.createGain();
+    mixGain.gain.setValueAtTime(0.0001, time);
+    // Attack quickly then decay over the duration
+    mixGain.gain.linearRampToValueAtTime(0.9, time + 0.006);
+    mixGain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+
+    // Route: noise -> hp -> (bp1->mix, bp2->mix, bp3->mix)
+    noise.connect(hp);
+    hp.connect(bp1);
+    hp.connect(bp2);
+    hp.connect(bp3);
+
+    bp1.connect(mixGain);
+    bp2.connect(mixGain);
+    bp3.connect(mixGain);
+
+    mixGain.connect(audioCtx.destination);
+
+    noise.start(time);
+    noise.stop(time + dur + 0.02);
+    noise.onended = () => {
+      mixGain.disconnect(); bp1.disconnect(); bp2.disconnect(); bp3.disconnect(); hp.disconnect();
     };
     scheduledOscillators.push(noise);
   }
@@ -385,25 +460,57 @@ function generateForLevel(levelKey){
   if(cfg.mustIncludeTriplet && !cfg.allowTriplets){
     throw new Error(`Level ${levelKey} requires triplets but does not allow them.`);
   }
-
   const tripletTemplate = cfg.allowTriplets ? tripletGroup(TYPES.quaver) : null;
   const basePool = cfg.allowTriplets && tripletTemplate
     ? allowedNotes.concat([tripletTemplate])
     : allowedNotes.slice();
-  const unitSizes = basePool.map(token=>token.units);
 
+  // unit sizes for reachability checks (per bar)
+  const unitSizes = basePool.map(token => token.units);
   const reachable = new Array(UNITS_PER_BAR + 1).fill(false);
   reachable[0] = true;
-  for(let total=1; total<=UNITS_PER_BAR; total++){
-    for(const size of unitSizes){
-      if(total >= size && reachable[total - size]){
+  for (let total = 1; total <= UNITS_PER_BAR; total++){
+    for (const size of unitSizes){
+      if (total >= size && reachable[total - size]){
         reachable[total] = true;
         break;
       }
     }
   }
-  if(!reachable[UNITS_PER_BAR]){
+  if (!reachable[UNITS_PER_BAR]){
     throw new Error(`Level ${levelKey} cannot fill a bar with configured tokens.`);
+  }
+
+  // Expand large-duration tokens (minim, semibreve) into beat-sized crotchets with ties
+  function expandLargeTokenToBeats(template){
+    const beats = template.units / UNITS_PER_QUARTER;
+    const out = [];
+    for (let i = 0; i < beats; i++){
+      const t = { name: 'crotchet', units: UNITS_PER_QUARTER, vfDur: TYPES.crotchet.vfDur };
+      // mark ties on all but the last part
+      if (i < beats - 1) t.tieToNext = true;
+      out.push(t);
+    }
+    return out;
+  }
+
+  function cloneToken(token){
+    if(token.isTriplet){
+      return {name: token.name, units: token.units, isTriplet:true, base: token.base};
+    }
+    const copy = {name: token.name, units: token.units, vfDur: token.vfDur};
+    if(token.dots){ copy.dots = token.dots; }
+    if(token.tieToNext) copy.tieToNext = true;
+    return copy;
+  }
+
+  function totalUnits(tokens){
+    return (tokens || []).reduce((sum, token) => sum + (token ? token.units : 0), 0);
+  }
+
+  function isOffbeatQuaverStart(unitOffset){
+    // off-beat quaver starts at half-quarter offsets: 4, 12, 20, 28 (units)
+    return (unitOffset % UNITS_PER_QUARTER) === (UNITS_PER_QUARTER / 2);
   }
 
   const requiredTokens = [];
@@ -417,58 +524,8 @@ function generateForLevel(levelKey){
     requiredTokens.push(tripletTemplate);
   }
 
-  function totalUnits(tokens){
-    return (tokens || []).reduce((sum, token)=>sum + (token ? token.units : 0), 0);
-  }
-
-  function cloneToken(token){
-    if(token.isTriplet){
-      return {name: token.name, units: token.units, isTriplet:true, base: token.base};
-    }
-    const copy = {name: token.name, units: token.units, vfDur: token.vfDur};
-    if(token.dots){
-      copy.dots = token.dots;
-    }
-    return copy;
-  }
-
-  function fillBar(requiredList){
-    const initial = (requiredList || []).map(cloneToken);
-    const tokens = initial.slice();
-    let usedUnits = totalUnits(tokens);
-    if(usedUnits > UNITS_PER_BAR){
-      return null;
-    }
-
-    let safety = 0;
-    while(usedUnits < UNITS_PER_BAR && safety < 500){
-      safety++;
-      const remaining = UNITS_PER_BAR - usedUnits;
-      const candidates = basePool.filter(token=>{
-        const leftover = remaining - token.units;
-        return leftover >= 0 && reachable[leftover];
-      });
-      if(!candidates.length){
-        return null;
-      }
-      const chosenTemplate = weightedPick(candidates);
-      const chosen = cloneToken(chosenTemplate);
-      tokens.push(chosen);
-      usedUnits += chosen.units;
-    }
-
-    if(usedUnits !== UNITS_PER_BAR){
-      return null;
-    }
-
-    return tokens.sort(()=>Math.random() - 0.5);
-  }
-
   function distributeRequiredTokens(){
-    if(!requiredTokens.length){
-      return [[],[]];
-    }
-
+    if(!requiredTokens.length) return [[],[]];
     const barReqs = [[],[]];
     const order = requiredTokens.slice().sort(()=>Math.random() - 0.5);
     for(const template of order){
@@ -482,16 +539,168 @@ function generateForLevel(levelKey){
         return null;
       }
     }
-
     return barReqs;
+  }
+
+  // Decompose an integer unit count into canonical tokens (largest-first)
+  function decomposeUnits(units){
+    const order = ['semibreve','minim','crotchet','quaver','semiquaver','demisemiquaver'];
+    const out = [];
+    let rem = units;
+    for(const name of order){
+      const size = TYPES[name].units;
+      while(rem >= size){
+        out.push({ name: TYPES[name].name, units: size, vfDur: TYPES[name].vfDur });
+        rem -= size;
+      }
+    }
+    // rem should be zero; if not, push smallest units
+    while(rem > 0){
+      out.push({ name: 'demisemiquaver', units: 1, vfDur: TYPES.demisemiquaver.vfDur });
+      rem -= 1;
+    }
+    return out;
+  }
+
+  // Split a following token so that its first part equals prevUnits. The
+  // remainder is decomposed into canonical durations. All created parts are
+  // flagged createdBySplit=true; tieToNext is set on each part except the last
+  // so the sequence represents a single tied original token.
+  function splitNextToken(bar, nextIdx, firstSize){
+    if(nextIdx >= bar.length) return false;
+    const nextToken = bar[nextIdx];
+    if(nextToken.isTriplet) return false;
+    if(nextToken.units <= firstSize) return false;
+    const total = nextToken.units;
+    const remainder = total - firstSize;
+    const parts = [];
+    // first part
+    parts.push({ name: (()=>{ for(const k in TYPES) if(TYPES[k].units===firstSize) return TYPES[k].name; return 'custom'; })(), units: firstSize, vfDur: (()=>{ for(const k in TYPES) if(TYPES[k].units===firstSize) return TYPES[k].vfDur; return TYPES.crotchet.vfDur; })(), createdBySplit: true });
+    // remainder parts
+    const remParts = decomposeUnits(remainder);
+    for(const rp of remParts){ rp.createdBySplit = true; parts.push(rp); }
+    // mark ties on all but last to indicate original single note
+    for(let i=0;i<parts.length-1;i++) parts[i].tieToNext = true;
+    // replace nextToken with parts
+    bar.splice(nextIdx, 1, ...parts);
+    return true;
+  }
+
+  // Fill a bar sequentially from beat 0 to beat 4, allowing multi-beat templates
+  // Fill a single bar; accepts an optional initial requiredList of token templates
+  // to place at the start of the bar. Returns { tokens, leftover } where leftover
+  // contains any expanded token parts that couldn't fit in this bar and must be
+  // prepended to the next bar.
+  function fillBar(requiredList){
+    const initial = (requiredList || []).map(cloneToken);
+    const tokens = initial.slice();
+    let usedUnits = totalUnits(tokens);
+    if (usedUnits > UNITS_PER_BAR) return null;
+
+    let safety = 0;
+    let leftoverParts = [];
+    while (usedUnits < UNITS_PER_BAR && safety < 1000){
+      safety++;
+      const remaining = UNITS_PER_BAR - usedUnits;
+
+      // candidates are any base token that fits within the remaining total of a bar
+      const candidates = basePool.filter(token => token.units <= UNITS_PER_BAR).slice();
+      if (!candidates.length) return null;
+
+      // Avoid placing triplets starting on off-beat quaver boundaries
+      const filtered = candidates.filter(t => {
+        if (!t.isTriplet) return true;
+        const startUnit = usedUnits;
+        if (isOffbeatQuaverStart(startUnit)) return false;
+        return true;
+      });
+      const pickPool = filtered.length ? filtered : candidates;
+
+      const chosenTemplate = weightedPick(pickPool);
+
+      // If chosen spans multiple beats (minim/semibreve), expand into crotchets with ties
+      if (!chosenTemplate.isTriplet && chosenTemplate.units > UNITS_PER_QUARTER){
+        const expanded = expandLargeTokenToBeats(chosenTemplate).map(cloneToken);
+        const expandedUnits = expanded.reduce((s,t)=>s+t.units,0);
+
+        if (expandedUnits <= remaining){
+          // fits entirely in this bar
+          // If the original template is a multi-beat token (e.g. minim/semibreve)
+          // and it does not cross the bar boundary, keep the original token so
+          // it renders as a single minim/semibreve instead of two tied crotchets.
+          if (chosenTemplate.units > UNITS_PER_QUARTER){
+            const chosen = cloneToken(chosenTemplate);
+            tokens.push(chosen);
+            usedUnits += chosen.units;
+          } else {
+            tokens.push(...expanded);
+            usedUnits += expandedUnits;
+          }
+        } else if (remaining > 0){
+          // split: put first portion into this bar, return remainder for next bar
+          const partsThatFit = Math.floor(remaining / UNITS_PER_QUARTER);
+          if (partsThatFit <= 0) {
+            // cannot place any part here; try picking another candidate
+            continue;
+          }
+          const firstPart = expanded.slice(0, partsThatFit);
+          const restPart = expanded.slice(partsThatFit);
+          tokens.push(...firstPart);
+          usedUnits += firstPart.reduce((s,t)=>s+t.units,0);
+          leftoverParts = restPart.map(cloneToken);
+          break; // this bar filled or we've placed what fits; leftover will be passed on
+        } else {
+          // no remaining space, should not happen due to loop condition
+          continue;
+        }
+      } else {
+        // chosen is a single-beat token (triplet or crotchet/quaver/etc)
+        if (chosenTemplate.units > remaining){
+          // chosen doesn't fit in this bar; try another candidate
+          // (this handles smaller remaining spaces where only small tokens can fit)
+          const smallCandidates = pickPool.filter(t => t.units <= remaining);
+          if (!smallCandidates.length) return null;
+          const chosenSmall = weightedPick(smallCandidates);
+          const chosen = cloneToken(chosenSmall);
+          tokens.push(chosen);
+          usedUnits += chosen.units;
+        } else {
+          const chosen = cloneToken(chosenTemplate);
+          tokens.push(chosen);
+          usedUnits += chosen.units;
+        }
+      }
+    }
+
+    if (usedUnits !== UNITS_PER_BAR && leftoverParts.length === 0) return null;
+    return { tokens, leftover: leftoverParts };
   }
 
   function validate(bars){
     const flatTokens = bars.flat();
     if(cfg.mustInclude && cfg.mustInclude.length){
       for(const typeName of cfg.mustInclude){
-        const found = flatTokens.some(t=>!t.isTriplet && t.name === typeName);
-        if(!found) return false;
+        // If the required type is larger than a beat (minim/semibreve), check for tied crotchet groups
+        const reqType = TYPES[typeName];
+        if(reqType && reqType.units > UNITS_PER_QUARTER){
+          const beatsNeeded = reqType.units / UNITS_PER_QUARTER;
+          let found = false;
+          for(let i=0;i<flatTokens.length;i++){
+            // look for a run of consecutive crotchets with tieToNext linking them for the required length
+            if(flatTokens[i].name === 'crotchet'){
+              let ok = true;
+              for(let j=0;j<beatsNeeded-1;j++){
+                const cur = flatTokens[i+j];
+                if(!cur || cur.name !== 'crotchet' || !cur.tieToNext) { ok = false; break; }
+              }
+              if(ok) { found = true; break; }
+            }
+          }
+          if(!found) return false;
+        } else {
+          const found = flatTokens.some(t => !t.isTriplet && t.name === typeName);
+          if(!found) return false;
+        }
       }
     }
     if(cfg.mustIncludeTriplet){
@@ -501,17 +710,126 @@ function generateForLevel(levelKey){
     return true;
   }
 
-  for(let attempt=0; attempt<400; attempt++){
+  // Try several attempts to generate two valid bars
+  for(let attempt = 0; attempt < 400; attempt++){
     const barReqs = distributeRequiredTokens();
     if(!barReqs) continue;
-    const firstBar = fillBar(barReqs[0]);
-    if(!firstBar) continue;
-    const secondBar = fillBar(barReqs[1]);
-    if(!secondBar) continue;
-    const bars = [firstBar, secondBar];
-    if(validate(bars)){
-      return {bars};
+
+    const firstRes = fillBar(barReqs[0]);
+    if(!firstRes) continue;
+    const leftover = firstRes.leftover || [];
+
+    // merge leftovers (must be at start) with required tokens for second bar
+    const secondReqs = (leftover.length ? leftover.concat(barReqs[1] || []) : (barReqs[1] || []));
+    const secondRes = fillBar(secondReqs);
+    if(!secondRes) continue;
+    // if secondRes still has leftover parts, generation failed for this attempt
+    if(secondRes.leftover && secondRes.leftover.length) continue;
+
+    let bars = [firstRes.tokens, secondRes.tokens];
+
+    // Post-process: enforce per-beat grouping rules so we don't leave an isolated
+    // quaver alone in a crotchet beat. If a beat contains a single quaver, and the
+    // following token is a crotchet, split that crotchet into two quavers a,b and
+    // mark a.tieToNext so a is tied to b; this allows the isolated quaver to beam
+    // with a while preserving the overall durations via the tie.
+    for(let bi = 0; bi < bars.length; bi++){
+      const bar = bars[bi];
+      let cursor = 0;
+      for(let ti = 0; ti < bar.length; ti++){
+        const token = bar[ti];
+        const startUnit = cursor;
+        const beatStart = Math.floor(startUnit / UNITS_PER_QUARTER) * UNITS_PER_QUARTER;
+        // check if this token is an isolated quaver within its beat
+        if(!token.isTriplet && token.units === UNITS_PER_QUARTER/2){
+          // count non-triplet tokens that start within this beat
+          let countInBeat = 0;
+          for(let scanIdx = 0, scanCursor = 0; scanIdx < bar.length; scanIdx++){
+            const scanToken = bar[scanIdx];
+            const scanStart = scanCursor;
+            if(scanStart >= beatStart && scanStart < beatStart + UNITS_PER_QUARTER){
+              if(!scanToken.isTriplet) countInBeat++;
+            }
+            scanCursor += scanToken.units;
+          }
+            if(countInBeat === 1){
+            // isolated quaver — try to split the next token so its first part
+            // matches this quaver's duration (broader rule)
+            const nextIdx = ti + 1;
+            if(nextIdx < bar.length){
+              splitNextToken(bar, nextIdx, token.units);
+            }
+          } else {
+            // If not strictly isolated but we have a direct quaver + crotchet pair
+            // (e.g., first two notes are quaver then crotchet), also split the
+            // crotchet so the quaver can beam with the first of the two quavers.
+            const nextIdx2 = ti + 1;
+              if(nextIdx2 < bar.length){
+              // broader split: split the following token so its first part matches this quaver
+              splitNextToken(bar, nextIdx2, token.units);
+            }
+          }
+        }
+        cursor += token.units;
+      }
     }
+    // Post-process 2: merge adjacent quaver pairs into crotchets when they form
+    // a single beat (start at the beat boundary). This converts sequences like
+    // [quaver, quaver] -> [crotchet] to make notation simpler when appropriate.
+    for(let bi = 0; bi < bars.length; bi++){
+      const bar = bars[bi];
+      let cursor = 0;
+      for(let ti = 0; ti < bar.length - 1; ti++){
+        const t1 = bar[ti];
+        const t2 = bar[ti+1];
+        const startUnit = cursor;
+        // only consider plain quavers
+        if(!t1.isTriplet && !t2.isTriplet && t1.units === UNITS_PER_QUARTER/2 && t2.units === UNITS_PER_QUARTER/2){
+          const endsAtBar = (startUnit + t1.units + t2.units) === UNITS_PER_BAR;
+
+          // Case A: both are regular quavers (not tied, not createdBySplit)
+          if(!t1.tieToNext && !t2.tieToNext && !t1.createdBySplit && !t2.createdBySplit){
+            if((startUnit % UNITS_PER_QUARTER) === 0 || endsAtBar){
+              const crot = { name: 'crotchet', units: UNITS_PER_QUARTER, vfDur: TYPES.crotchet.vfDur };
+              bar.splice(ti, 2, crot);
+              cursor += crot.units;
+              continue;
+            }
+          }
+
+          // Case B: both were created by a previous split — allow merge if there
+          // are no non-split quavers in the same beat (i.e., nothing that needs
+          // to beam with the first half).
+          if(t1.createdBySplit && t2.createdBySplit){
+            const beatStart = Math.floor(startUnit / UNITS_PER_QUARTER) * UNITS_PER_QUARTER;
+            // Only consider non-split quavers that occur earlier in the same beat
+            // (these are the ones that would need to beam with the first half).
+            let precedingNonSplitQuaver = false;
+            let scanCursor = 0;
+            for(let si = 0; si < bar.length; si++){
+              const st = bar[si];
+              const sStart = scanCursor;
+              if(sStart >= beatStart && sStart < startUnit){
+                if(!st.isTriplet && st.units === UNITS_PER_QUARTER/2 && !st.createdBySplit){
+                  precedingNonSplitQuaver = true;
+                  break;
+                }
+              }
+              scanCursor += st.units;
+            }
+            if(!precedingNonSplitQuaver){
+              const crot2 = { name: 'crotchet', units: UNITS_PER_QUARTER, vfDur: TYPES.crotchet.vfDur };
+              bar.splice(ti, 2, crot2);
+              cursor += crot2.units;
+              continue;
+            }
+          }
+        }
+        cursor += t1.units;
+      }
+    }
+
+    if(validate(bars)) return { bars };
   }
 
   throw new Error(`Failed to generate rhythm for level ${levelKey}`);
@@ -550,7 +868,7 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
       }
       stave.setContext(context).draw();
 
-      const { notes, tuplets, ties, tripletGroups } = processBar(bar, VF);
+  const { notes, tuplets, ties, tripletGroups, tokenNoteMap } = processBar(bar, VF);
       const voice = new VF.Voice({ num_beats: 4, beat_value: 4 });
       voice.setMode(VF.Voice.Mode.SOFT);
       voice.addTickables(notes);
@@ -593,6 +911,24 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
         t.setContext(context).draw();
       }
       beams.forEach(b => b.setContext(context).draw());
+      // Draw ties created from token-level tieToNext markers (expanded multi-beat tokens)
+      if (Array.isArray(tokenNoteMap)){
+        for (let ti = 0; ti < tokenNoteMap.length; ti++){
+          const info = tokenNoteMap[ti];
+          const token = info.token || {};
+          if (token.tieToNext){
+            const nextInfo = tokenNoteMap[ti+1];
+            if (nextInfo){
+              const firstNote = notes[info.startIndex];
+              const lastNote = notes[nextInfo.startIndex];
+              try{
+                const tieObj = new VF.StaveTie({ first_note: firstNote, last_note: lastNote, first_indices: [0], last_indices: [0] });
+                tieObj.setContext(context).draw();
+              } catch(e){}
+            }
+          }
+        }
+      }
       for (const tie of ties) {
         tie.setContext(context).draw();
       }
@@ -611,13 +947,15 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
     const barNotes = [];
     const allBeams = [];
     let allNotes = [];
+    const barTokenMaps = [];
 
     for (const bar of bars) {
-      const { notes, tuplets, ties, tripletGroups } = processBar(bar, VF);
+      const { notes, tuplets, ties, tripletGroups, tokenNoteMap } = processBar(bar, VF);
       allNotes = allNotes.concat(notes);
       allTuplets.push(...tuplets);
       allTies.push(...ties);
       barNotes.push(notes);
+      barTokenMaps.push(tokenNoteMap || []);
       
       const noteGroups = [];
       let currentGroup = [];
@@ -663,6 +1001,45 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
       t.setContext(context).draw();
     }
     allBeams.forEach(b => b.setContext(context).draw());
+    // Draw ties created from token-level tieToNext markers across bars
+    let globalOffset = 0;
+    for (let bi = 0; bi < barTokenMaps.length; bi++){
+      const tokenMap = barTokenMaps[bi] || [];
+      const notesInBar = barNotes[bi] || [];
+      for (let ti = 0; ti < tokenMap.length; ti++){
+        const info = tokenMap[ti];
+        const token = info.token || {};
+        if (token.tieToNext){
+          // find next token's note start globally
+          let nextBar = bi;
+          let nextTokenIndex = ti + 1;
+          if (nextTokenIndex >= tokenMap.length){
+            // next token begins in the next bar
+            nextBar = bi + 1;
+            nextTokenIndex = 0;
+          }
+          if (nextBar < barTokenMaps.length){
+            const nextInfo = (barTokenMaps[nextBar] || [])[nextTokenIndex];
+            if (nextInfo){
+              // compute global indices
+              let firstGlobal = 0;
+              for (let k = 0; k < bi; k++) firstGlobal += (barNotes[k] || []).length;
+              firstGlobal += info.startIndex;
+              let secondGlobal = 0;
+              for (let k = 0; k < nextBar; k++) secondGlobal += (barNotes[k] || []).length;
+              secondGlobal += nextInfo.startIndex;
+              const firstNote = allNotes[firstGlobal];
+              const lastNote = allNotes[secondGlobal];
+              try{
+                const tieObj = new VF.StaveTie({ first_note: firstNote, last_note: lastNote, first_indices: [0], last_indices: [0] });
+                tieObj.setContext(context).draw();
+              } catch(e){}
+            }
+          }
+        }
+      }
+      globalOffset += notesInBar.length;
+    }
     for (const tie of allTies) {
       tie.setContext(context).draw();
     }
@@ -695,6 +1072,11 @@ function processBar(bar, VF) {
   const tripletGroups = [];
   let currentBeat = 0;
 
+  // tokenNoteMap will track, for each input token, where its corresponding note(s)
+  // begin in the `notes` array and how many stave-notes it produced. This is
+  // used by the renderer to create ties between adjacent produced notes.
+  const tokenNoteMap = [];
+
   for (const token of bar) {
     const tokenUnits = token.units;
     const tokenStartUnit = currentBeat * UNITS_PER_QUARTER;
@@ -710,9 +1092,11 @@ function processBar(bar, VF) {
         n.isTripletPart = true;
         n.setStemDirection(1);
       });
+      const startIndex = notes.length;
       notes.push(...tripletNotes);
       tuplets.push(new VF.Tuplet(tripletNotes));
       tripletGroups.push(tripletNotes);
+      tokenNoteMap.push({ startIndex, noteCount: tripletNotes.length, token });
     } else {
       const dur = token.vfDur || (() => {
         for (const k in TYPES) if (TYPES[k].units === token.units) return TYPES[k].vfDur;
@@ -724,7 +1108,9 @@ function processBar(bar, VF) {
       if (token.dots) {
         for (let d = 0; d < token.dots; d++) note.addDotToAll();
       }
+      const startIndex = notes.length;
       notes.push(note);
+      tokenNoteMap.push({ startIndex, noteCount: 1, token });
     }
     currentBeat += tokenUnits / UNITS_PER_QUARTER;
   }
@@ -733,7 +1119,7 @@ function processBar(bar, VF) {
   // A full implementation would need to split notes that cross beat boundaries.
   // For now, we'll just return an empty ties array.
 
-  return { notes, tuplets, ties, tripletGroups };
+  return { notes, tuplets, ties, tripletGroups, tokenNoteMap };
 }
 
 function tokenLabel(token){
