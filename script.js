@@ -848,7 +848,20 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
   const STAVE_Y_PAD = 20;
   const STAVE_TOP_EXTRA = Math.max(0, Math.abs(TUPLET_Y_SHIFT) - 8);
   const SINGLE_LINE_BREAKPOINT = 500;
-  const shouldWrap = opts.width < SINGLE_LINE_BREAKPOINT && bars.length > 1;
+
+  // Check for cross-bar ties (ties spanning across bar lines)
+  let hasCrossBarTie = false;
+  if (bars.length > 1) {
+    for (let bi = 0; bi < bars.length - 1; bi++) {
+      const bar = bars[bi];
+      if (bar.length > 0 && bar[bar.length - 1].tieToNext) {
+        hasCrossBarTie = true;
+        break;
+      }
+    }
+  }
+
+  const shouldWrap = opts.width < SINGLE_LINE_BREAKPOINT && bars.length > 1 && !hasCrossBarTie;
   const numStaves = shouldWrap ? bars.length : 1;
   const requiredHeight = numStaves * STAVE_HEIGHT + STAVE_Y_PAD + STAVE_TOP_EXTRA + STAVE_Y_PAD;
 
