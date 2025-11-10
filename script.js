@@ -896,8 +896,17 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
       const beams = straightBeams.concat(tripletBeams);
 
   const formatter = new VF.Formatter().joinVoices([voice]);
-  // Leave a small right-side gap so beams/tuplets don't collide with barlines
-  const formatWidth = shouldWrap ? opts.width - 40 : opts.width - 80;
+  // Leave extra right-side gap so beams/tuplets don't collide with barlines,
+  // especially at narrow widths. Increase padding when the available
+  // render width is small to prevent notes from being pushed past the barline.
+  let EXTRA_RIGHT_PADDING = 24;
+  if (opts.width < 360) {
+    EXTRA_RIGHT_PADDING = 64; // small cards need more reserved space
+  } else if (opts.width < 480) {
+    EXTRA_RIGHT_PADDING = 36;
+  }
+  const baseFormatWidth = shouldWrap ? opts.width - 40 : opts.width - 80;
+  const formatWidth = Math.max(120, baseFormatWidth - EXTRA_RIGHT_PADDING);
       formatter.format([voice], formatWidth);
       voice.draw(context, stave);
 
@@ -987,7 +996,14 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
 
   const formatter = new VF.Formatter().joinVoices([voice]);
   // Reduce the formatting width slightly to reserve right padding and avoid overlap
-  const formatWidth = shouldWrap ? opts.width - 40 : opts.width - 80;
+  let EXTRA_RIGHT_PADDING = 24;
+  if (opts.width < 360) {
+    EXTRA_RIGHT_PADDING = 64;
+  } else if (opts.width < 480) {
+    EXTRA_RIGHT_PADDING = 36;
+  }
+  const baseFormatWidth = shouldWrap ? opts.width - 40 : opts.width - 80;
+  const formatWidth = Math.max(120, baseFormatWidth - EXTRA_RIGHT_PADDING);
     formatter.format([voice], formatWidth);
     voice.draw(context, stave);
 
@@ -1050,11 +1066,55 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
       context.save();
       context.setStrokeStyle('#111');
       context.setLineWidth(1.2);
+      // Stave bounds for clamping
+      const staveLeft = stave.getX();
+      const staveRight = staveLeft + (typeof stave.getWidth === 'function' ? stave.getWidth() : (stave.width || (opts.width - 20)));
+
       for (let i = 1; i < barNotes.length; i++) {
         const notesInBar = barNotes[i];
         if (!notesInBar.length) continue;
         const firstNote = notesInBar[0];
-        const x = Math.max(stave.getX() + 6, firstNote.getAbsoluteX() - 12);
+        const prevNotes = barNotes[i - 1] || [];
+        const prevLastNote = prevNotes.length ? prevNotes[prevNotes.length - 1] : null;
+
+        // Conservative offsets to avoid overlapping noteheads
+        const DEFAULT_NOTE_MARGIN = 8;
+        let leftEdge = staveLeft + 6;
+        let rightEdge = staveRight - 6;
+
+        if (prevLastNote && typeof prevLastNote.getAbsoluteX === 'function') {
+          const prevX = prevLastNote.getAbsoluteX();
+          const prevWidth = (typeof prevLastNote.getWidth === 'function') ? prevLastNote.getWidth() : (prevLastNote.width || 12);
+          // prefer to place after prev note's right edge + a small margin
+          leftEdge = Math.max(leftEdge, prevX + prevWidth + 2);
+        }
+
+        if (firstNote && typeof firstNote.getAbsoluteX === 'function') {
+          const firstX = firstNote.getAbsoluteX();
+          const firstWidth = (typeof firstNote.getWidth === 'function') ? firstNote.getWidth() : (firstNote.width || 12);
+          // prefer to place before first note's left edge - a small margin
+          rightEdge = Math.min(rightEdge, firstX - firstWidth - 2);
+        }
+
+        let x;
+        if (leftEdge <= rightEdge) {
+          // place roughly in the middle of the available gap
+          x = Math.round((leftEdge + rightEdge) / 2);
+        } else if (prevLastNote && typeof prevLastNote.getAbsoluteX === 'function') {
+          // no gap: fall back to placing just after previous note's right edge
+          const prevX = prevLastNote.getAbsoluteX();
+          const prevWidth = (typeof prevLastNote.getWidth === 'function') ? prevLastNote.getWidth() : (prevLastNote.width || 12);
+          x = Math.round(prevX + prevWidth + DEFAULT_NOTE_MARGIN);
+        } else if (firstNote && typeof firstNote.getAbsoluteX === 'function') {
+          x = Math.round(firstNote.getAbsoluteX() - DEFAULT_NOTE_MARGIN);
+        } else {
+          // final fallback: place at a quarter width from left
+          x = Math.round(staveLeft + Math.max(20, (staveRight - staveLeft) / 4));
+        }
+
+        // Clamp to stave bounds so the line is always visible
+        x = Math.max(staveLeft + 4, Math.min(x, staveRight - 4));
+
         context.beginPath();
         context.moveTo(x, topY);
         context.lineTo(x, bottomY);
