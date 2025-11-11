@@ -217,7 +217,7 @@ function stopPlayback(){
   finalizePlaybackState();
 }
 
-function scheduleClick(time, accent){
+function scheduleClick(time, accent, duration = 0.2){
   // Generic metronome click (used for main rhythm)
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
@@ -225,11 +225,11 @@ function scheduleClick(time, accent){
   osc.frequency.setValueAtTime(accent ? 880 : 660, time);
   gain.gain.setValueAtTime(0.0001, time);
   gain.gain.exponentialRampToValueAtTime(accent ? 0.6 : 0.4, time + 0.005);
-  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.15);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
   osc.connect(gain);
   gain.connect(audioCtx.destination);
   osc.start(time);
-  osc.stop(time + 0.2);
+  osc.stop(time + duration + 0.01);
   osc.onended = ()=>{
     gain.disconnect();
   };
@@ -391,17 +391,31 @@ function playRhythm(bars){
 
   for(const bar of bars){
     let isFirstNoteInBar = true;
-    for(const token of bar){
+    let i = 0;
+    while (i < bar.length) {
+      const token = bar[i];
       if(token.isTriplet){
         const subDur = (token.units / 3) * secondsPerUnit;
-        for(let i=0;i<3;i++){
-          scheduleClick(cursor, isFirstNoteInBar && i === 0);
+        for(let k=0; k<3; k++){
+          scheduleClick(cursor, isFirstNoteInBar && k === 0);
           cursor += subDur;
         }
-      } else {
-        scheduleClick(cursor, isFirstNoteInBar);
-        cursor += token.units * secondsPerUnit;
+        i++;
+        isFirstNoteInBar = false;
+        continue;
       }
+      let totalDuration = token.units * secondsPerUnit;
+      let accent = isFirstNoteInBar;
+      // Accumulate duration for tied notes
+      let j = i + 1;
+      while (j < bar.length && bar[j-1].tieToNext) {
+        totalDuration += bar[j].units * secondsPerUnit;
+        j++;
+      }
+      // Schedule a single click for the entire tied group
+      scheduleClick(cursor, accent, totalDuration);
+      cursor += totalDuration;
+      i = j;
       isFirstNoteInBar = false;
     }
   }
