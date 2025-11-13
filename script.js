@@ -389,35 +389,40 @@ function playRhythm(bars){
     cursor += beatDurationSeconds;
   }
 
-  for(const bar of bars){
-    let isFirstNoteInBar = true;
-    let i = 0;
-    while (i < bar.length) {
-      const token = bar[i];
-      if(token.isTriplet){
-        const subDur = (token.units / 3) * secondsPerUnit;
-        for(let k=0; k<3; k++){
-          scheduleClick(cursor, isFirstNoteInBar && k === 0);
-          cursor += subDur;
-        }
-        i++;
-        isFirstNoteInBar = false;
-        continue;
+  const allTokens = bars.flat();
+  let i = 0;
+  let barUnitTracker = 0;
+  while (i < allTokens.length) {
+    const token = allTokens[i];
+    const isFirstNoteInBar = barUnitTracker % UNITS_PER_BAR === 0;
+
+    if(token.isTriplet){
+      const subDur = (token.units / 3) * secondsPerUnit;
+      for(let k=0; k<3; k++){
+        scheduleClick(cursor, isFirstNoteInBar && k === 0);
+        cursor += subDur;
       }
-      let totalDuration = token.units * secondsPerUnit;
-      let accent = isFirstNoteInBar;
-      // Accumulate duration for tied notes
-      let j = i + 1;
-      while (j < bar.length && bar[j-1].tieToNext) {
-        totalDuration += bar[j].units * secondsPerUnit;
-        j++;
-      }
-      // Schedule a single click for the entire tied group
-      scheduleClick(cursor, accent, totalDuration);
-      cursor += totalDuration;
-      i = j;
-      isFirstNoteInBar = false;
+      barUnitTracker += token.units;
+      i++;
+      continue;
     }
+
+    let totalDuration = token.units * secondsPerUnit;
+    let accent = isFirstNoteInBar;
+    
+    // Accumulate duration for tied notes
+    let j = i + 1;
+    while (j < allTokens.length && allTokens[j-1].tieToNext) {
+      totalDuration += allTokens[j].units * secondsPerUnit;
+      barUnitTracker += allTokens[j].units;
+      j++;
+    }
+    
+    // Schedule a single click for the entire tied group
+    scheduleClick(cursor, accent, totalDuration);
+    cursor += totalDuration;
+    barUnitTracker += token.units;
+    i = j;
   }
 
   playbackTimeout = setTimeout(()=>{
@@ -1044,48 +1049,6 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
       t.setContext(context).draw();
     }
     allBeams.forEach(b => b.setContext(context).draw());
-    // Draw ties created from token-level tieToNext markers across bars
-    let globalOffset = 0;
-    for (let bi = 0; bi < barTokenMaps.length; bi++){
-      const tokenMap = barTokenMaps[bi] || [];
-      const notesInBar = barNotes[bi] || [];
-      for (let ti = 0; ti < tokenMap.length; ti++){
-        const info = tokenMap[ti];
-        const token = info.token || {};
-        if (token.tieToNext){
-          // find next token's note start globally
-          let nextBar = bi;
-          let nextTokenIndex = ti + 1;
-          if (nextTokenIndex >= tokenMap.length){
-            // next token begins in the next bar
-            nextBar = bi + 1;
-            nextTokenIndex = 0;
-          }
-          if (nextBar < barTokenMaps.length){
-            const nextInfo = (barTokenMaps[nextBar] || [])[nextTokenIndex];
-            if (nextInfo){
-              // compute global indices
-              let firstGlobal = 0;
-              for (let k = 0; k < bi; k++) firstGlobal += (barNotes[k] || []).length;
-              firstGlobal += info.startIndex;
-              let secondGlobal = 0;
-              for (let k = 0; k < nextBar; k++) secondGlobal += (barNotes[k] || []).length;
-              secondGlobal += nextInfo.startIndex;
-              const firstNote = allNotes[firstGlobal];
-              const lastNote = allNotes[secondGlobal];
-              try{
-                const tieObj = new VF.StaveTie({ first_note: firstNote, last_note: lastNote, first_indices: [0], last_indices: [0] });
-                tieObj.setContext(context).draw();
-              } catch(e){}
-            }
-          }
-        }
-      }
-      globalOffset += notesInBar.length;
-    }
-    for (const tie of allTies) {
-      tie.setContext(context).draw();
-    }
 
     if (bars.length > 1) {
       const topY = stave.getYForLine(0) - 1;
@@ -1148,6 +1111,49 @@ function renderRhythmInto(div, bars, opts={width:600, height:120}){
         context.stroke();
       }
       context.restore();
+    }
+
+    // Draw ties created from token-level tieToNext markers across bars
+    let globalOffset = 0;
+    for (let bi = 0; bi < barTokenMaps.length; bi++){
+      const tokenMap = barTokenMaps[bi] || [];
+      const notesInBar = barNotes[bi] || [];
+      for (let ti = 0; ti < tokenMap.length; ti++){
+        const info = tokenMap[ti];
+        const token = info.token || {};
+        if (token.tieToNext){
+          // find next token's note start globally
+          let nextBar = bi;
+          let nextTokenIndex = ti + 1;
+          if (nextTokenIndex >= tokenMap.length){
+            // next token begins in the next bar
+            nextBar = bi + 1;
+            nextTokenIndex = 0;
+          }
+          if (nextBar < barTokenMaps.length){
+            const nextInfo = (barTokenMaps[nextBar] || [])[nextTokenIndex];
+            if (nextInfo){
+              // compute global indices
+              let firstGlobal = 0;
+              for (let k = 0; k < bi; k++) firstGlobal += (barNotes[k] || []).length;
+              firstGlobal += info.startIndex;
+              let secondGlobal = 0;
+              for (let k = 0; k < nextBar; k++) secondGlobal += (barNotes[k] || []).length;
+              secondGlobal += nextInfo.startIndex;
+              const firstNote = allNotes[firstGlobal];
+              const lastNote = allNotes[secondGlobal];
+              try{
+                const tieObj = new VF.StaveTie({ first_note: firstNote, last_note: lastNote, first_indices: [0], last_indices: [0] });
+                tieObj.setContext(context).draw();
+              } catch(e){}
+            }
+          }
+        }
+      }
+      globalOffset += notesInBar.length;
+    }
+    for (const tie of allTies) {
+      tie.setContext(context).draw();
     }
   }
 }
