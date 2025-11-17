@@ -643,18 +643,10 @@ function generateForLevel(levelKey){
         const expandedUnits = expanded.reduce((s,t)=>s+t.units,0);
 
         if (expandedUnits <= remaining){
-          // fits entirely in this bar
-          // If the original template is a multi-beat token (e.g. minim/semibreve)
-          // and it does not cross the bar boundary, keep the original token so
-          // it renders as a single minim/semibreve instead of two tied crotchets.
-          if (chosenTemplate.units > UNITS_PER_QUARTER){
-            const chosen = cloneToken(chosenTemplate);
-            tokens.push(chosen);
-            usedUnits += chosen.units;
-          } else {
-            tokens.push(...expanded);
-            usedUnits += expandedUnits;
-          }
+          // fits entirely in this bar - keep the original token as-is
+          const chosen = cloneToken(chosenTemplate);
+          tokens.push(chosen);
+          usedUnits += chosen.units;
         } else if (remaining > 0){
           // split: put first portion into this bar, return remainder for next bar
           const partsThatFit = Math.floor(remaining / UNITS_PER_QUARTER);
@@ -691,7 +683,7 @@ function generateForLevel(levelKey){
       }
     }
 
-    if (usedUnits !== UNITS_PER_BAR && leftoverParts.length === 0) return null;
+    if (usedUnits !== UNITS_PER_BAR) return null;
     return { tokens, leftover: leftoverParts };
   }
 
