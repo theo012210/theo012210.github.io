@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1c6c5b" />
+    <meta
+      name="description"
+      content="A playful note-recognition website for young piano learners."
+    />
+    <title>Stave Sprouts</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero-card">
+        <div class="hero-copy">
+          <p class="eyebrow">Stave Sprouts</p>
+          <h1>Learn note names with big colors, simple choices, and friendly practice.</h1>
+          <p class="lede">
+            Built for tiny hands and early learners, this site helps children recognize notes on the staff with guided practice and a quick quiz.
+          </p>
+          <div class="hero-actions">
+            <button type="button" class="primary-button" id="start-practice-home">Start practice</button>
+            <button type="button" class="secondary-button" id="start-quiz-home">Start quiz</button>
+          </div>
+        </div>
+        <div class="hero-badge">
+          <span>🎵</span>
+          <strong>Kid friendly</strong>
+          <small>Bright, simple, and teacher ready.</small>
+        </div>
+      </section>
+
+      <section class="mode-bar" aria-label="Learning modes">
+        <button type="button" class="chip chip-active" id="treble-chip">Treble clef</button>
+        <button type="button" class="chip" id="bass-chip">Bass clef</button>
+        <button type="button" class="chip chip-active" id="practice-chip">Practice</button>
+        <button type="button" class="chip" id="quiz-chip">Quiz</button>
+      </section>
+
+      <section class="tutorial-card" aria-labelledby="tutorial-title">
+        <div class="tutorial-copy">
+          <p class="panel-label">Tutorial</p>
+          <h2 id="tutorial-title">Lines and spaces are like a hamburger stack.</h2>
+          <p>
+            The staff has 5 lines and 4 spaces. Notes can sit on a line or float in a space, just like burger layers stacked up and down.
+          </p>
+          <div class="tutorial-tip">
+            <span class="tip-badge">FACE</span>
+            <div>
+              <strong>Treble spaces spell FACE</strong>
+              <p>From bottom to top, the spaces in treble clef are F, A, C, and E.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tutorial-visuals">
+          <div class="cartoon-stack" aria-hidden="true">
+            <div class="stack-item stack-top">Top bun</div>
+            <div class="stack-item stack-line">Line</div>
+            <div class="stack-item stack-space">Space</div>
+            <div class="stack-item stack-line">Line</div>
+            <div class="stack-item stack-space">Space</div>
+            <div class="stack-item stack-line">Line</div>
+            <div class="stack-item stack-space">Space</div>
+            <div class="stack-item stack-line">Line</div>
+            <div class="stack-item stack-space">Space</div>
+            <div class="stack-item stack-bottom">Bottom bun</div>
+          </div>
+          <p class="tutorial-caption">Think: line, space, line, space, line, space, line, space, line.</p>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="board-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-label">Now playing</p>
+              <h2 id="mode-title">Choose practice or quiz</h2>
+            </div>
+            <button type="button" class="ghost-button" id="next-note" disabled>New note</button>
+          </div>
+
+          <div id="board-stage"></div>
+
+          <div class="status-card" aria-live="polite">
+            <p id="message">Tap a note to start the game.</p>
+            <div class="score-row" id="score-row">
+              <span>0 correct</span>
+              <span>0 tried</span>
+              <span>0% accuracy</span>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side-panel">
+          <div class="panel-block">
+            <p class="panel-label">Practice mode</p>
+            <p>Show a note, say the answer out loud, then tap reveal to check.</p>
+            <button type="button" class="primary-button full" id="reveal-answer" disabled>Reveal answer</button>
+          </div>
+
+          <div class="panel-block">
+            <p class="panel-label">Quiz mode</p>
+            <p>Pick the right note from the big buttons below.</p>
+            <div class="answer-grid" id="answer-grid" aria-label="Note answers"></div>
+            <button type="button" class="secondary-button full" id="next-note-quiz" disabled>Next note</button>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
