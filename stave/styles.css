@@ -264,10 +264,88 @@ button {
 
 .stack-top,
 .stack-bottom {
-  min-height: 34px;
+  min-height: 56px;
   color: #8b5b23;
-  background: linear-gradient(180deg, #ffd47a, #f3b85d);
+  position: relative;
+  border-radius: 50% 50% 40% 40% / 60% 60% 40% 40%;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 243, 209, 0.9) 0%, rgba(255,243,209,0.0) 12%), linear-gradient(180deg, #ffd47a 0%, #f3b85d 60%, #e69b4a 100%);
+  box-shadow: inset 0 -8px 18px rgba(0,0,0,0.06), 0 8px 18px rgba(21,46,34,0.08);
+  overflow: visible;
 }
+
+.stack-top::after,
+.stack-bottom::after {
+  /* sesame seed scatter */
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 18%;
+  height: 36%;
+  background-image: radial-gradient(circle at 8% 20%, #fff7d9 0.8px, transparent 1px),
+                    radial-gradient(circle at 26% 36%, #fff7d9 0.9px, transparent 1px),
+                    radial-gradient(circle at 42% 18%, #fff7d9 0.85px, transparent 1px),
+                    radial-gradient(circle at 62% 32%, #fff7d9 0.9px, transparent 1px),
+                    radial-gradient(circle at 78% 20%, #fff7d9 0.8px, transparent 1px);
+  background-size: 100% 100%;
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+.stack-bottom {
+  /* flip the shape for the bottom bun */
+  border-radius: 40% 40% 50% 50% / 40% 40% 60% 60%;
+  transform: translateY(-6px);
+}
+
+/* Correct-answer overlay */
+.correct-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(12, 24, 18, 0.36);
+  z-index: 1200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+.correct-overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+.ribbon-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ribbon {
+  position: absolute;
+  left: -20%;
+  width: 140%;
+  height: 22vh;
+  transform: rotate(-16deg) translateY(-8vh);
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,0.12));
+  opacity: 0.95;
+}
+.ribbon-1 { background: linear-gradient(90deg,#ffd47a,#f3b85d); top: 8vh; }
+.ribbon-2 { background: linear-gradient(90deg,#ff9f80,#ffcc66); top: 22vh; opacity:0.9 }
+.ribbon-3 { background: linear-gradient(90deg,#8ad3a3,#4fb27f); top: 36vh; opacity:0.85 }
+
+.overlay-card {
+  position: relative;
+  background: #fffef9;
+  border-radius: 18px;
+  padding: 22px 28px;
+  box-shadow: 0 30px 60px rgba(21,46,34,0.18);
+  text-align: center;
+  z-index: 1210;
+  transform: translateY(8px);
+}
+.overlay-card h3 { margin: 0 0 8px; font-size: 1.4rem; }
+.overlay-card .overlay-message { margin: 0 0 16px; color: #5d6f68; }
+.overlay-card .primary-button { min-width: 160px; }
 
 .stack-line {
   min-height: 16px;

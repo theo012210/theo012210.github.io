@@ -19,12 +19,11 @@
       <section class="hero-card">
         <div class="hero-copy">
           <p class="eyebrow">Stave Sprouts</p>
-          <h1>Learn note names with big colors, simple choices, and friendly practice.</h1>
+          <h1>Learn note names with big colors and simple choices.</h1>
           <p class="lede">
-            Built for tiny hands and early learners, this site helps children recognize notes on the staff with guided practice and a quick quiz.
+            Built for tiny hands and early learners, this site helps children recognize notes on the staff with guided lessons and a quick quiz.
           </p>
           <div class="hero-actions">
-            <button type="button" class="primary-button" id="start-practice-home">Start practice</button>
             <button type="button" class="secondary-button" id="start-quiz-home">Start quiz</button>
           </div>
         </div>
@@ -38,7 +37,7 @@
       <section class="mode-bar" aria-label="Learning modes">
         <button type="button" class="chip chip-active" id="treble-chip">Treble clef</button>
         <button type="button" class="chip" id="bass-chip">Bass clef</button>
-        <button type="button" class="chip chip-active" id="practice-chip">Practice</button>
+        <!-- Practice mode removed -->
         <button type="button" class="chip" id="quiz-chip">Quiz</button>
       </section>
 
@@ -81,7 +80,7 @@
           <div class="panel-header">
             <div>
               <p class="panel-label">Now playing</p>
-              <h2 id="mode-title">Choose practice or quiz</h2>
+              <h2 id="mode-title">Choose quiz</h2>
             </div>
             <button type="button" class="ghost-button" id="next-note" disabled>New note</button>
           </div>
@@ -99,11 +98,7 @@
         </div>
 
         <aside class="side-panel">
-          <div class="panel-block">
-            <p class="panel-label">Practice mode</p>
-            <p>Show a note, say the answer out loud, then tap reveal to check.</p>
-            <button type="button" class="primary-button full" id="reveal-answer" disabled>Reveal answer</button>
-          </div>
+          <!-- Practice panel removed -->
 
           <div class="panel-block">
             <p class="panel-label">Quiz mode</p>
@@ -116,5 +111,17 @@
     </main>
 
     <script type="module" src="./app.js"></script>
+    <div id="correct-overlay" class="correct-overlay" aria-hidden="true">
+      <div class="ribbon-container" aria-hidden="true">
+        <div class="ribbon ribbon-1"></div>
+        <div class="ribbon ribbon-2"></div>
+        <div class="ribbon ribbon-3"></div>
+      </div>
+      <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
+        <h3 id="overlay-title">Great job!</h3>
+        <p class="overlay-message">You got it right.</p>
+        <button id="overlay-next-note" class="primary-button">Next note</button>
+      </div>
+    </div>
   </body>
 </html>

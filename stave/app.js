@@ -42,7 +42,7 @@ function displayNoteName(answer) {
 }
 
 const state = {
-  mode: 'practice',
+  mode: 'quiz',
   clef: 'treble',
   challenge: createChallenge('treble'),
   selectedAnswer: null,
@@ -50,7 +50,7 @@ const state = {
     correct: 0,
     tried: 0,
   },
-  message: 'Look at the note, then reveal the answer.',
+  message: 'Choose the note name that matches the staff.',
 };
 
 const refs = {
@@ -64,11 +64,13 @@ const refs = {
   revealAnswer: document.getElementById('reveal-answer'),
   trebleChip: document.getElementById('treble-chip'),
   bassChip: document.getElementById('bass-chip'),
-  practiceChip: document.getElementById('practice-chip'),
   quizChip: document.getElementById('quiz-chip'),
-  startPracticeHome: document.getElementById('start-practice-home'),
   startQuizHome: document.getElementById('start-quiz-home'),
+  correctOverlay: document.getElementById('correct-overlay'),
+  overlayNext: document.getElementById('overlay-next-note'),
 };
+
+let overlayTimeoutId = null;
 
 function randomInt(max) {
   return Math.floor(Math.random() * max);
@@ -222,18 +224,15 @@ function renderMode() {
   refs.modeTitle.textContent =
     state.mode === 'quiz'
       ? `${clefLabels[state.clef]} quiz`
-      : state.mode === 'practice'
-        ? `${clefLabels[state.clef]} practice`
-        : 'Choose practice or quiz';
+      : 'Choose quiz';
 
   refs.message.textContent = state.message;
   refs.nextNote.disabled = state.mode === 'home';
   refs.nextNoteQuiz.disabled = state.mode === 'home';
-  refs.revealAnswer.disabled = state.mode === 'home';
+  if (refs.revealAnswer) refs.revealAnswer.disabled = state.mode === 'home';
 
   refs.trebleChip.classList.toggle('chip-active', state.clef === 'treble');
   refs.bassChip.classList.toggle('chip-active', state.clef === 'bass');
-  refs.practiceChip.classList.toggle('chip-active', state.mode === 'practice');
   refs.quizChip.classList.toggle('chip-active', state.mode === 'quiz');
 }
 
@@ -248,9 +247,7 @@ function setMode(mode) {
   state.mode = mode;
   state.selectedAnswer = null;
 
-  if (mode === 'practice') {
-    state.message = 'Look at the note, then reveal the answer.';
-  } else if (mode === 'quiz') {
+  if (mode === 'quiz') {
     state.message = 'Choose the note name that matches the staff.';
   } else {
     state.message = 'Tap a note to start the game.';
@@ -296,6 +293,7 @@ function handleGuess(answer) {
   if (answer === displayNoteName(state.challenge.answer)) {
     state.score.correct += 1;
     state.message = 'Great job!';
+    showCorrectOverlay();
   } else {
     state.message = 'Try the next note.';
   }
@@ -303,14 +301,47 @@ function handleGuess(answer) {
   render();
 }
 
-refs.startPracticeHome.addEventListener('click', () => setMode('practice'));
+function showCorrectOverlay() {
+  const overlay = refs.correctOverlay;
+  if (!overlay) return;
+  const msg = overlay.querySelector('.overlay-message');
+  if (msg) msg.textContent = `This note is ${displayNoteName(state.challenge.answer)}.`;
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden', 'false');
+  // auto-dismiss after 2.5s and advance to next challenge
+  if (overlayTimeoutId) clearTimeout(overlayTimeoutId);
+  overlayTimeoutId = setTimeout(() => {
+    overlayTimeoutId = null;
+    closeCorrectOverlay();
+    nextChallenge();
+  }, 2500);
+}
+
+function closeCorrectOverlay() {
+  const overlay = refs.correctOverlay;
+  if (!overlay) return;
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden', 'true');
+  if (overlayTimeoutId) {
+    clearTimeout(overlayTimeoutId);
+    overlayTimeoutId = null;
+  }
+}
+
 refs.startQuizHome.addEventListener('click', () => setMode('quiz'));
-refs.practiceChip.addEventListener('click', () => setMode('practice'));
 refs.quizChip.addEventListener('click', () => setMode('quiz'));
 refs.trebleChip.addEventListener('click', () => setClef('treble'));
 refs.bassChip.addEventListener('click', () => setClef('bass'));
 refs.nextNote.addEventListener('click', nextChallenge);
 refs.nextNoteQuiz.addEventListener('click', nextChallenge);
-refs.revealAnswer.addEventListener('click', revealAnswer);
+if (refs.revealAnswer) refs.revealAnswer.addEventListener('click', revealAnswer);
+if (refs.overlayNext) refs.overlayNext.addEventListener('click', () => { closeCorrectOverlay(); nextChallenge(); });
+
+// allow clicking overlay background to dismiss
+if (refs.correctOverlay) refs.correctOverlay.addEventListener('click', (e) => {
+  if (e.target === refs.correctOverlay) {
+    closeCorrectOverlay();
+  }
+});
 
 render();
