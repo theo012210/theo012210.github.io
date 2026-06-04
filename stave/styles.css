@@ -310,6 +310,13 @@ button {
   pointer-events: none;
   transition: opacity 260ms ease;
 }
+.correct-overlay canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 .correct-overlay.show {
   opacity: 1;
   pointer-events: auto;
@@ -320,31 +327,6 @@ button {
   overflow: hidden;
   pointer-events: none;
 }
-
-/* Confetti pieces animation */
-.confetti {
-  position: absolute;
-  top: 8%;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  will-change: transform, opacity;
-  animation: confettiPop 420ms cubic-bezier(.2,.9,.2,1), confettiFall 1400ms linear 120ms forwards;
-}
-
-@keyframes confettiPop {
-  0% { transform: translateY(0) scale(0.2) rotate(0deg); opacity: 0 }
-  40% { transform: translateY(-14vh) scale(1.05) rotate(60deg); opacity: 1 }
-  100% { transform: translateY(-6vh) scale(1) rotate(40deg); }
-}
-
-@keyframes confettiFall {
-  0% { transform: translateY(-6vh) rotate(0deg); opacity: 1 }
-  100% { transform: translateY(34vh) rotate(720deg); opacity: 0 }
-}
-
-/* optional circle confetti */
-.confetti.circle { border-radius: 50%; }
 
 .overlay-card {
   position: relative;
@@ -357,8 +339,32 @@ button {
   transform: translateY(8px);
 }
 .overlay-card h3 { margin: 0 0 8px; font-size: 1.4rem; }
+.overlay-card #cheers {
+  margin: 0 0 8px;
+  font-size: 3rem;
+  color: #ff5733;
+  font-weight: bold;
+  opacity: 0;
+  animation: animateText 4s ease-in-out infinite;
+  z-index: 10;
+}
 .overlay-card .overlay-message { margin: 0 0 16px; color: #5d6f68; }
 .overlay-card .primary-button { min-width: 160px; }
+
+@keyframes animateText {
+  0% {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-40px);
+  }
+}
 
 .stack-line {
   min-height: 16px;

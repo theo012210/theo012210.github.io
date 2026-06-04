@@ -68,9 +68,13 @@ const refs = {
   startQuizHome: document.getElementById('start-quiz-home'),
   correctOverlay: document.getElementById('correct-overlay'),
   overlayNext: document.getElementById('overlay-next-note'),
+  confettiCanvas: document.getElementById('confetti-canvas'),
 };
 
 let overlayTimeoutId = null;
+let confettiAnimationId = null;
+let confettiParticles = [];
+let confettiContext = null;
 
 function randomInt(max) {
   return Math.floor(Math.random() * max);
@@ -315,10 +319,7 @@ function showCorrectOverlay() {
     closeCorrectOverlay();
     nextChallenge();
   }, 2500);
-  // show static ribbons and spawn streamers
-  const container = overlay.querySelector('.ribbon-container');
-  if (container) container.style.display = 'block';
-  spawnStreamers();
+  startConfettiAnimation();
 }
 
 function closeCorrectOverlay() {
@@ -330,48 +331,114 @@ function closeCorrectOverlay() {
     clearTimeout(overlayTimeoutId);
     overlayTimeoutId = null;
   }
-  // hide ribbon container and clear dynamic streamers
-  const container = overlay.querySelector('.ribbon-container');
-  if (container) container.style.display = 'none';
-  clearStreamers();
+  stopConfettiAnimation();
 }
 
-function spawnStreamers() {
-  const container = refs.correctOverlay && refs.correctOverlay.querySelector('.ribbon-container');
-  if (!container) return;
-  const colors = ['#ffd47a', '#ff9f80', '#8ad3a3', '#6ea8ff', '#ff66b2', '#ffd166'];
-  const count = 36;
-  for (let i = 0; i < count; i++) {
-    const el = document.createElement('div');
-    el.className = 'confetti';
-    // random size
-    const size = 6 + Math.round(Math.random() * 10);
-    el.style.width = `${size}px`;
-    el.style.height = `${size}px`;
-    // random left position across the container
-    const left = 6 + Math.random() * 88; // 6%..94%
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    const popDur = 280 + Math.random() * 360;
-    const fallDur = 1000 + Math.random() * 900;
-    el.style.left = `${left}%`;
-    el.style.background = color;
-    el.style.animationDelay = `${Math.random() * 240}ms`;
-    el.style.animationDuration = `${Math.round(popDur)}ms, ${Math.round(fallDur)}ms`;
-    // randomly make some circular confetti
-    if (Math.random() > 0.75) el.classList.add('circle');
-    // slight rotation initial
-    el.style.transform = `rotate(${Math.floor(Math.random() * 360)}deg)`;
-    container.appendChild(el);
-    (function(node) {
-      node.addEventListener('animationend', () => { try { node.remove(); } catch(e){} }, { once: true });
-    })(el);
+function resizeConfettiCanvas() {
+  const canvas = refs.confettiCanvas;
+  if (!canvas) return;
+  const pixelRatio = window.devicePixelRatio || 1;
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  canvas.width = Math.round(width * pixelRatio);
+  canvas.height = Math.round(height * pixelRatio);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  confettiContext = canvas.getContext('2d');
+  if (confettiContext) {
+    confettiContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   }
 }
 
-function clearStreamers() {
-  const container = refs.correctOverlay && refs.correctOverlay.querySelector('.ribbon-container');
-  if (!container) return;
-  Array.from(container.children).forEach((child) => child.remove());
+function createConfettiParticle() {
+  const canvas = refs.confettiCanvas;
+  return {
+    x: Math.random() * (canvas ? canvas.clientWidth : window.innerWidth),
+    y: Math.random() * (canvas ? canvas.clientHeight : window.innerHeight) - (canvas ? canvas.clientHeight : window.innerHeight),
+    size: Math.random() * 6 + 3,
+    speedX: (Math.random() - 0.5) * 4,
+    speedY: Math.random() * 4 + 2,
+    rotation: (Math.random() - 0.5) * 5,
+    color: `hsl(${Math.random() * 360}, 80%, 60%)`,
+    shape: Math.random() > 0.7 ? 'circle' : 'rect',
+  };
+}
+
+function initConfettiParticles(count = 80) {
+  confettiParticles = Array.from({ length: count }, () => createConfettiParticle());
+}
+
+function updateConfettiParticle(particle, width, height) {
+  particle.x += particle.speedX;
+  particle.y += particle.speedY;
+  particle.x += Math.sin(particle.y * 0.1) * Math.random() * 0.5;
+  if (particle.y > height + 20) {
+    particle.y = Math.random() * height - height;
+    particle.x = Math.random() * width;
+  }
+}
+
+function drawConfettiParticle(particle) {
+  if (!confettiContext) return;
+  confettiContext.save();
+  confettiContext.translate(particle.x, particle.y);
+  confettiContext.rotate(particle.rotation);
+  confettiContext.fillStyle = particle.color;
+  if (particle.shape === 'circle') {
+    confettiContext.beginPath();
+    confettiContext.arc(0, 0, particle.size * 0.65, 0, Math.PI * 2);
+    confettiContext.fill();
+  } else {
+    confettiContext.fillRect(
+      particle.size,
+      particle.size / 4,
+      particle.size * 2,
+      particle.size / 2,
+    );
+  }
+  confettiContext.restore();
+}
+
+function animateConfetti() {
+  if (!refs.correctOverlay || !refs.correctOverlay.classList.contains('show')) {
+    confettiAnimationId = null;
+    return;
+  }
+
+  const canvas = refs.confettiCanvas;
+  if (!canvas || !confettiContext) {
+    confettiAnimationId = null;
+    return;
+  }
+
+  const width = canvas.clientWidth || window.innerWidth;
+  const height = canvas.clientHeight || window.innerHeight;
+  confettiContext.clearRect(0, 0, width, height);
+
+  confettiParticles.forEach((particle) => {
+    updateConfettiParticle(particle, width, height);
+    drawConfettiParticle(particle);
+  });
+
+  confettiAnimationId = requestAnimationFrame(animateConfetti);
+}
+
+function startConfettiAnimation() {
+  stopConfettiAnimation();
+  resizeConfettiCanvas();
+  initConfettiParticles();
+  animateConfetti();
+}
+
+function stopConfettiAnimation() {
+  if (confettiAnimationId) {
+    cancelAnimationFrame(confettiAnimationId);
+    confettiAnimationId = null;
+  }
+  confettiParticles = [];
+  if (confettiContext && refs.confettiCanvas) {
+    confettiContext.clearRect(0, 0, refs.confettiCanvas.clientWidth || window.innerWidth, refs.confettiCanvas.clientHeight || window.innerHeight);
+  }
 }
 
 refs.startQuizHome.addEventListener('click', () => setMode('quiz'));
@@ -381,12 +448,18 @@ refs.bassChip.addEventListener('click', () => setClef('bass'));
 refs.nextNote.addEventListener('click', nextChallenge);
 refs.nextNoteQuiz.addEventListener('click', nextChallenge);
 if (refs.revealAnswer) refs.revealAnswer.addEventListener('click', revealAnswer);
-if (refs.overlayNext) refs.overlayNext.addEventListener('click', () => { const container = refs.correctOverlay && refs.correctOverlay.querySelector('.ribbon-container'); if (container) container.style.display = 'none'; clearStreamers(); closeCorrectOverlay(); nextChallenge(); });
+if (refs.overlayNext) refs.overlayNext.addEventListener('click', () => { closeCorrectOverlay(); nextChallenge(); });
 
 // allow clicking overlay background to dismiss
 if (refs.correctOverlay) refs.correctOverlay.addEventListener('click', (e) => {
   if (e.target === refs.correctOverlay) {
     closeCorrectOverlay();
+  }
+});
+
+window.addEventListener('resize', () => {
+  if (refs.correctOverlay && refs.correctOverlay.classList.contains('show')) {
+    resizeConfettiCanvas();
   }
 });
 
