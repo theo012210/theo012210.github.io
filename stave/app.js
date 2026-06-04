@@ -315,6 +315,10 @@ function showCorrectOverlay() {
     closeCorrectOverlay();
     nextChallenge();
   }, 2500);
+  // show static ribbons and spawn streamers
+  const container = overlay.querySelector('.ribbon-container');
+  if (container) container.style.display = 'block';
+  spawnStreamers();
 }
 
 function closeCorrectOverlay() {
@@ -326,6 +330,42 @@ function closeCorrectOverlay() {
     clearTimeout(overlayTimeoutId);
     overlayTimeoutId = null;
   }
+  // hide ribbon container and clear dynamic streamers
+  const container = overlay.querySelector('.ribbon-container');
+  if (container) container.style.display = 'none';
+  clearStreamers();
+}
+
+function spawnStreamers() {
+  const container = refs.correctOverlay && refs.correctOverlay.querySelector('.ribbon-container');
+  if (!container) return;
+  const colors = ['linear-gradient(180deg,#ffd47a,#f3b85d)', 'linear-gradient(180deg,#ff9f80,#ffcc66)', 'linear-gradient(180deg,#8ad3a3,#4fb27f)', 'linear-gradient(180deg,#a6c8ff,#6ea8ff)'];
+  const count = 18;
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = 'streamer';
+    const left = 10 + Math.random() * 80; // 10%..90%
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const delay = (Math.random() * 160) + 'ms';
+    const duration = (900 + Math.random() * 800) + 'ms';
+    el.style.left = `${left}%`;
+    el.style.background = color;
+    el.style.animationDelay = delay;
+    el.style.animationDuration = `${parseFloat(duration)}ms, ${parseFloat(duration) + 400}ms`;
+    // slight horizontal offset to create curl
+    el.style.transform = `rotate(${(Math.random() * 60) - 30}deg)`;
+    container.appendChild(el);
+    // remove after animation completes
+    (function(node) {
+      node.addEventListener('animationend', () => { try { node.remove(); } catch(e){} }, { once: true });
+    })(el);
+  }
+}
+
+function clearStreamers() {
+  const container = refs.correctOverlay && refs.correctOverlay.querySelector('.ribbon-container');
+  if (!container) return;
+  Array.from(container.children).forEach((child) => child.remove());
 }
 
 refs.startQuizHome.addEventListener('click', () => setMode('quiz'));
@@ -335,7 +375,7 @@ refs.bassChip.addEventListener('click', () => setClef('bass'));
 refs.nextNote.addEventListener('click', nextChallenge);
 refs.nextNoteQuiz.addEventListener('click', nextChallenge);
 if (refs.revealAnswer) refs.revealAnswer.addEventListener('click', revealAnswer);
-if (refs.overlayNext) refs.overlayNext.addEventListener('click', () => { closeCorrectOverlay(); nextChallenge(); });
+if (refs.overlayNext) refs.overlayNext.addEventListener('click', () => { const container = refs.correctOverlay && refs.correctOverlay.querySelector('.ribbon-container'); if (container) container.style.display = 'none'; clearStreamers(); closeCorrectOverlay(); nextChallenge(); });
 
 // allow clicking overlay background to dismiss
 if (refs.correctOverlay) refs.correctOverlay.addEventListener('click', (e) => {
