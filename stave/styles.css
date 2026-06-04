@@ -321,37 +321,30 @@ button {
   pointer-events: none;
 }
 
-/* Small streamer ribbons like a party popper (彩帶拉炮) */
-.streamer {
+/* Confetti pieces animation */
+.confetti {
   position: absolute;
-  top: 10%;
-  width: 8px;
-  height: 28vh;
-  border-radius: 6px;
-  transform-origin: top center;
+  top: 8%;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
   will-change: transform, opacity;
-  animation: pop 700ms cubic-bezier(.2,.9,.2,1), fall 1200ms linear 220ms forwards;
+  animation: confettiPop 420ms cubic-bezier(.2,.9,.2,1), confettiFall 1400ms linear 120ms forwards;
 }
 
-@keyframes pop {
-  0% { transform: translateY(0) scaleY(0.2) rotate(0deg); opacity: 0 }
-  30% { transform: translateY(-18vh) scaleY(1.05) rotate(20deg); opacity: 1 }
-  60% { transform: translateY(-8vh) scaleY(0.95) rotate(-12deg); }
-  100% { transform: translateY(-10vh) scaleY(1) rotate(8deg); }
+@keyframes confettiPop {
+  0% { transform: translateY(0) scale(0.2) rotate(0deg); opacity: 0 }
+  40% { transform: translateY(-14vh) scale(1.05) rotate(60deg); opacity: 1 }
+  100% { transform: translateY(-6vh) scale(1) rotate(40deg); }
 }
 
-@keyframes fall {
-  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1 }
-  100% { transform: translateY(30vh) rotate(720deg); opacity: 0 }
+@keyframes confettiFall {
+  0% { transform: translateY(-6vh) rotate(0deg); opacity: 1 }
+  100% { transform: translateY(34vh) rotate(720deg); opacity: 0 }
 }
 
-.streamer::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 6px;
-  display: block;
-}
+/* optional circle confetti */
+.confetti.circle { border-radius: 50%; }
 
 .overlay-card {
   position: relative;

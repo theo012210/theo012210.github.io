@@ -339,23 +339,29 @@ function closeCorrectOverlay() {
 function spawnStreamers() {
   const container = refs.correctOverlay && refs.correctOverlay.querySelector('.ribbon-container');
   if (!container) return;
-  const colors = ['linear-gradient(180deg,#ffd47a,#f3b85d)', 'linear-gradient(180deg,#ff9f80,#ffcc66)', 'linear-gradient(180deg,#8ad3a3,#4fb27f)', 'linear-gradient(180deg,#a6c8ff,#6ea8ff)'];
-  const count = 18;
+  const colors = ['#ffd47a', '#ff9f80', '#8ad3a3', '#6ea8ff', '#ff66b2', '#ffd166'];
+  const count = 36;
   for (let i = 0; i < count; i++) {
     const el = document.createElement('div');
-    el.className = 'streamer';
-    const left = 10 + Math.random() * 80; // 10%..90%
+    el.className = 'confetti';
+    // random size
+    const size = 6 + Math.round(Math.random() * 10);
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    // random left position across the container
+    const left = 6 + Math.random() * 88; // 6%..94%
     const color = colors[Math.floor(Math.random() * colors.length)];
-    const delay = (Math.random() * 160) + 'ms';
-    const duration = (900 + Math.random() * 800) + 'ms';
+    const popDur = 280 + Math.random() * 360;
+    const fallDur = 1000 + Math.random() * 900;
     el.style.left = `${left}%`;
     el.style.background = color;
-    el.style.animationDelay = delay;
-    el.style.animationDuration = `${parseFloat(duration)}ms, ${parseFloat(duration) + 400}ms`;
-    // slight horizontal offset to create curl
-    el.style.transform = `rotate(${(Math.random() * 60) - 30}deg)`;
+    el.style.animationDelay = `${Math.random() * 240}ms`;
+    el.style.animationDuration = `${Math.round(popDur)}ms, ${Math.round(fallDur)}ms`;
+    // randomly make some circular confetti
+    if (Math.random() > 0.75) el.classList.add('circle');
+    // slight rotation initial
+    el.style.transform = `rotate(${Math.floor(Math.random() * 360)}deg)`;
     container.appendChild(el);
-    // remove after animation completes
     (function(node) {
       node.addEventListener('animationend', () => { try { node.remove(); } catch(e){} }, { once: true });
     })(el);
